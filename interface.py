@@ -272,7 +272,7 @@ class Interface:
 
     def confirm_action(self, message):
         """Ask for confirmation"""
-        return Confirm.ask(f"[bold red]{message}[/bold red]", default=False)
+        return Confirm.ask(f"[bold red]{message}[/bold red]", default=True)
 
     def print_logs(self, message, style="dim"):
         """Print log message (for verbose output)"""

@@ -198,7 +198,7 @@ def handle_delete_roles():
 
 def handle_ban_members():
     stop_event.clear()
-    mode = Prompt.ask("[bold cyan]Mode[/bold cyan]", choices=["fetch", "fast"], default="fetch")
+    mode = Prompt.ask("[bold cyan]Mode[/bold cyan]", choices=["fetch", "fast"], default="fast")
     fetch_mode = (mode == "fetch")
     
     ui.print_warning("Banning all members...")

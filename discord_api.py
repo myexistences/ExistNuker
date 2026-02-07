@@ -101,7 +101,8 @@ def is_in_guild(token, guild_id):
 
 def leave_guild(token, guild_id):
     """Make the bot leave a guild"""
-    success, data = make_request("DELETE", f"/users/@me/guilds/{guild_id}", token)
+    # Bots use this endpoint to leave guilds
+    success, data = make_request("DELETE", f"/guilds/{guild_id}/members/@me", token)
     return success
 
 
