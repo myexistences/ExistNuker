@@ -43,7 +43,8 @@ def make_request(method, endpoint, token, json_data=None, max_retries=3):
             elif method.upper() == "POST":
                 response = session.post(url, headers=headers, json=json_data, timeout=timeout_seconds)
             elif method.upper() == "DELETE":
-                response = session.delete(url, headers=headers, timeout=timeout_seconds)
+                del_headers = {"Authorization": f"Bot {token}"}  # No Content-Type for DELETE
+                response = session.delete(url, headers=del_headers, timeout=timeout_seconds)
             elif method.upper() == "PUT":
                 response = session.put(url, headers=headers, json=json_data, timeout=timeout_seconds)
             elif method.upper() == "PATCH":
@@ -101,9 +102,20 @@ def is_in_guild(token, guild_id):
 
 def leave_guild(token, guild_id):
     """Make the bot leave a guild"""
-    # Bots use this endpoint to leave guilds
-    success, data = make_request("DELETE", f"/guilds/{guild_id}/members/@me", token)
-    return success
+    import requests
+    headers = {
+        "Authorization": f"Bot {token}"
+    }
+    url = f"{BASE_URL}/users/@me/guilds/{guild_id}"
+    try:
+        response = requests.delete(url, headers=headers, timeout=10)
+        if response.status_code in [200, 204]:
+            return True
+        print(f"[DEBUG] Leave guild failed: {response.status_code} - {response.text}")
+        return False
+    except Exception as e:
+        print(f"[DEBUG] Leave guild error: {e}")
+        return False
 
 
 def get_bot_info(token):
