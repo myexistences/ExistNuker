@@ -7,7 +7,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-<img src="https://via.placeholder.com/800x400?text=ExistNuker+Dashboard" alt="ExistNuker Dashboard" width="800"/>
+<img src="https://i.imgur.com/v5PbF9R.png" alt="ExistNuker Dashboard" width="800"/>
 
 <br/>
 
