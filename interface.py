@@ -72,10 +72,48 @@ class Interface:
         """Print info message"""
         self.console.print(f"[bold cyan]Info:[/bold cyan] {message}")
 
+    def get_masked_input(self, prompt=""):
+        """Get input masked with asterisks"""
+        if prompt:
+            self.console.print(prompt, end="")
+        
+        # Flush output to ensure prompt is shown
+        sys.stdout.flush()
+        
+        password = ""
+        
+        if sys.platform == 'win32':
+            import msvcrt
+            while True:
+                ch = msvcrt.getch()
+                if ch == b'\r' or ch == b'\n':
+                    self.console.print('') # Newline
+                    return password
+                elif ch == b'\x08': # Backspace
+                    if len(password) > 0:
+                        password = password[:-1]
+                        # Move back, overwrite with space, move back again
+                        sys.stdout.write('\b \b')
+                        sys.stdout.flush()
+                elif ch == b'\x03': # Ctrl+C
+                    raise KeyboardInterrupt
+                else:
+                    try:
+                        char = ch.decode('utf-8')
+                        password += char
+                        sys.stdout.write('*')
+                        sys.stdout.flush()
+                    except:
+                        pass
+        else:
+            # Fallback for Linux/Mac (simplified, or use getpass)
+            import getpass
+            return getpass.getpass("")
+
     def get_token(self):
         """Prompt for token"""
         self.console.print("[bold yellow]Enter Discord Bot Token:[/bold yellow]")
-        return Prompt.ask("", password=True)
+        return self.get_masked_input()
 
     def select_server(self, guilds):
         """Display server selection menu"""
@@ -102,11 +140,14 @@ class Interface:
             table.add_row(str(i), str(guild.get('name', 'Unknown')), str(guild.get('id', 'Unknown')))
             
         self.console.print(table)
-        self.console.print("\n[bold]T[/bold] - Change Token")
+        self.console.print("[bold]R[/bold] - Refresh List")
+        self.console.print("[bold]T[/bold] - Change Token")
         self.console.print("[bold]Q[/bold] - Quit")
         
         while True:
             choice = Prompt.ask("[bold yellow]Choice[/bold yellow]").upper()
+            if choice == 'R':
+                return 'REFRESH'
             if choice == 'T':
                 return 'CHANGE_TOKEN'
             if choice == 'Q':
@@ -158,6 +199,7 @@ class Interface:
             ("5", "Delete Roles"),
             ("6", "Ban Members"),
             ("7", "Prune Inactive Members"),
+            ("8", "Customize Webhook Settings"),
             ("0", "Back (Select Different Server)")
         ]
         

@@ -31,14 +31,21 @@
 - **Smart Rate-Limiting**: Automatically handles Discord API rate limits (429s) with retry logic.
 - **Connection Pooling**: Reuses network connections to reduce latency.
 
+### 🛡️ Smart Defense & Reliability
+- **Kick Detection**: Zero-cost monitoring instantly stops operations if the bot is kicked.
+- **Smart Pagination**: Intelligent member fetching that never gets stuck, even with unbannable admins.
+- **Auto-Retry**: "Fast but not Reckless" mode retries failed requests once to handle network blips.
+- **Instant Stop**: Press `Ctrl+C` to immediately halt all threads and return to the menu.
+
 ### 🛠️ Core Capabilities
 | Feature | Description |
 |---|---|
-| **🚫 Mass Ban** | Fetch members and ban them with live status tracking. Supports "Fast Mode" and Bot filtering. |
-| **📢 Webhook Spam** | Create webhooks and spam messages across all channels simultaneously. |
+| **🚫 Mass Ban** | Fetch members and ban them with live status tracking. Supports "Fast Mode", Bot filtering, and Smart Pagination. |
+| **📢 Webhook Spam** | Create webhooks and spam messages across all channels simultaneously. Includes separate Customization Menu. |
 | **💬 Channel Nuke** | Bulk delete and create channels with custom names and types. |
 | **🎭 Role Nuke** | Bulk delete and create roles, respecting hierarchy and managed roles. |
 | **🧹 Pruning** | Kick inactive members based on inactivity period. |
+| **🔒 Security** | Token input is masked with asterisks (`*`) for privacy. |
 
 ---
 

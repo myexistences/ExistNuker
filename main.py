@@ -132,22 +132,33 @@ def handle_webhook_spam():
     current_name = get_webhook_name()
     current_avatar = get_webhook_avatar()
     
-    if Confirm.ask("[bold yellow]Customize webhook settings?[/bold yellow]"):
-        current_name = Prompt.ask("Webhook Name", default=current_name)
-        set_webhook_name(current_name)
-        
-        avatar = Prompt.ask("Avatar URL", default=current_avatar)
-        if avatar != current_avatar:
-            if webhooks.validate_image_url(avatar):
-                current_avatar = avatar
-                set_webhook_avatar(avatar)
-            else:
-                ui.print_error("Invalid image URL, keeping previous.")
-    
-    ui.print_warning("Starting webhook spam... (Ctrl+C to stop)")
+    ui.print_warning(f"Starting webhook spam as '{current_name}'... (Ctrl+C to stop)")
     webhooks.spam(config.TOKEN, config.GUILD_ID, content, amount, 
                   webhook_name=current_name, avatar_url=current_avatar, stop_event=stop_event)
     
+    Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
+
+def handle_customize_webhook():
+    stop_event.clear()
+    current_name = get_webhook_name()
+    current_avatar = get_webhook_avatar()
+    
+    ui.print_info(f"Current Name: {current_name}")
+    ui.print_info(f"Current Avatar: {current_avatar}")
+    
+    new_name = Prompt.ask("New Webhook Name", default=current_name)
+    set_webhook_name(new_name)
+    
+    new_avatar = Prompt.ask("New Avatar URL", default=current_avatar)
+    if new_avatar != current_avatar:
+    # Validate image
+        if webhooks.validate_image_url(new_avatar):
+            set_webhook_avatar(new_avatar)
+            ui.print_success("Avatar updated!")
+        else:
+            ui.print_error("Invalid image URL. Keeping previous avatar.")
+    
+    ui.print_SUCCESS("Webhook settings updated!")
     Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
 
 def handle_create_channels():
@@ -190,20 +201,18 @@ def handle_ban_members():
     mode = Prompt.ask("[bold cyan]Mode[/bold cyan]", choices=["fetch", "fast"], default="fetch")
     fetch_mode = (mode == "fetch")
     
-    if ui.confirm_action("This will KICK bots and BAN members. Continue?"):
-        ui.print_warning("Banning all members...")
-        users.ban_all(config.TOKEN, config.GUILD_ID, fetch_mode=fetch_mode, stop_event=stop_event)
-        Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
+    ui.print_warning("Banning all members...")
+    users.ban_all(config.TOKEN, config.GUILD_ID, fetch_mode=fetch_mode, stop_event=stop_event)
+    Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
 
 def handle_prune_members():
     stop_event.clear()
     days = int(Prompt.ask("[bold cyan]Days of inactivity[/bold cyan]", default="7"))
     include_roles = Confirm.ask("Include members with roles?")
     
-    if ui.confirm_action(f"Prune members inactive for {days} days?"):
-        ui.print_warning("Pruning members...")
-        users.prune_members(config.TOKEN, config.GUILD_ID, days=days, include_roles=include_roles)
-        Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
+    ui.print_warning("Pruning members...")
+    users.prune_members(config.TOKEN, config.GUILD_ID, days=days, include_roles=include_roles)
+    Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
 
 def main():
     while True:
@@ -225,6 +234,9 @@ def main():
             
         selection = ui.select_server(guilds)
         
+        if selection == 'REFRESH':
+            continue
+            
         if selection == 'CHANGE_TOKEN':
             delete_token()
             config.TOKEN = None
@@ -255,6 +267,15 @@ def main():
             elif choice == "5": handle_delete_roles()
             elif choice == "6": handle_ban_members()
             elif choice == "7": handle_prune_members()
+            elif choice == "8": handle_customize_webhook()
+            
+            # Check if bot was kicked during operation
+            if config.kicked_event.is_set():
+                config.kicked_event.clear()
+                ui.print_error("Bot was kicked from the server! Returning to selection...")
+                time.sleep(2)
+                config.GUILD_ID = None
+                break
 
 if __name__ == "__main__":
     try:

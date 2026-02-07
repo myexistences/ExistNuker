@@ -205,20 +205,27 @@ def spam(token, guild_id, content, amount_per_channel, webhook_name=None, avatar
             
             done_creating[0] = True
         
-        producer = threading.Thread(target=create_worker)
+        producer = threading.Thread(target=create_worker, daemon=True)
         producer.start()
         
         spam_threads = min(thread_count, 20)
         consumers = []
         for _ in range(spam_threads):
-            t = threading.Thread(target=spam_worker)
+            t = threading.Thread(target=spam_worker, daemon=True)
             t.start()
             consumers.append(t)
         
-        producer.join()
+        # Wait for producer
+        while producer.is_alive():
+            if stop_event.is_set():
+                return 0
+            time.sleep(0.1)
         
-        for t in consumers:
-            t.join()
+        # Wait for consumers
+        while any(t.is_alive() for t in consumers):
+            if stop_event.is_set():
+                return 0
+            time.sleep(0.1)
     
     ui.print_success(f"Finished! Created {created_count[0]} webhooks, Sent {sent[0]} messages")
     return sent[0]

@@ -11,6 +11,8 @@ from pathlib import Path
 
 # Global stop event for Ctrl+C handling
 stop_event = threading.Event()
+# Global event for Bot Kicked detection
+kicked_event = threading.Event()
 
 # Initialize colorama for Windows ANSI color support
 try:

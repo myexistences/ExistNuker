@@ -118,12 +118,14 @@ def spam(token, guild_id, name, type_id, count, thread_count=THREADS, stop_event
                 break
             # Calculate exact number for this thread to avoid over-creation
             num = min(per_thread, count - i)
-            t = threading.Thread(target=worker, args=(num,))
+            t = threading.Thread(target=worker, args=(num,), daemon=True)
             threads.append(t)
             t.start()
             
-        for t in threads:
-            t.join()
+        while any(t.is_alive() for t in threads):
+            if stop_event.is_set():
+                return 0
+            time.sleep(0.1)
             
     ui.print_success(f"Created {created[0]} channels | Failed {failed[0]}")
     return created[0]
@@ -180,12 +182,14 @@ def nuke(token, guild_id, thread_count=THREADS, stop_event=None):
             if stop_event and stop_event.is_set():
                 break
             chunk = all_channels[i:i + chunk_size]
-            t = threading.Thread(target=worker, args=(chunk,))
+            t = threading.Thread(target=worker, args=(chunk,), daemon=True)
             threads.append(t)
             t.start()
             
-        for t in threads:
-            t.join()
+        while any(t.is_alive() for t in threads):
+            if stop_event.is_set():
+                return 0
+            time.sleep(0.1)
         
         # Retry failed channels
         if failed_channels and (not stop_event or not stop_event.is_set()):

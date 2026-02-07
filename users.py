@@ -39,24 +39,35 @@ def get_member_highest_role(member, all_roles):
     return highest
 
 def kick_user_fast(token, guild_id, user_id):
-    """Kick a user - FAST, ignore errors"""
+    """Kick a user - FAST with one retry"""
     session = get_session()
     headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
-    try:
-        response = session.delete(f"{BASE_URL}/guilds/{guild_id}/members/{user_id}", headers=headers, timeout=3)
-        return response.status_code in [200, 204, 404]
-    except Exception:
-        return False
+    for _ in range(2): # 1 retry
+        try:
+            response = session.delete(f"{BASE_URL}/guilds/{guild_id}/members/{user_id}", headers=headers, timeout=5)
+            if response.status_code in [200, 204, 404]:
+                return True
+            if response.status_code == 429:
+                time.sleep(response.json().get("retry_after", 1))
+        except Exception:
+            pass
+    return False
 
 def ban_user_fast(token, guild_id, user_id):
-    """Ban a user - FAST, ignore errors"""
+    """Ban a user - FAST with one retry"""
     session = get_session()
     headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
-    try:
-        response = session.put(f"{BASE_URL}/guilds/{guild_id}/bans/{user_id}", headers=headers, json={"delete_message_seconds": 0}, timeout=3)
-        return response.status_code in [200, 204, 404]
-    except Exception:
-        return False
+    payload = {"delete_message_seconds": 0}
+    for _ in range(2): # 1 retry
+        try:
+            response = session.put(f"{BASE_URL}/guilds/{guild_id}/bans/{user_id}", headers=headers, json=payload, timeout=5)
+            if response.status_code in [200, 204, 404]:
+                return True
+            if response.status_code == 429:
+                time.sleep(response.json().get("retry_after", 1))
+        except Exception:
+            pass
+    return False
 
 def prune_members(token, guild_id, days=7, include_roles=True):
     """Prune inactive members"""
@@ -195,18 +206,25 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
         attempted_ids = set()
         
         round_num = 0
-        consecutive_no_new = 0
+        last_id = None
         
         while True:
             if stop_event and stop_event.is_set(): break
             round_num += 1
             
             with ui.status_spinner(f"Round {round_num}: Fetching members..."):
-                members = get_members(token, guild_id, limit=1000)
+                members = get_members(token, guild_id, limit=1000, after=last_id)
             
             if not members:
+                if last_id is not None:
+                    # Reached end of list, loop back to check for missed targets
+                    last_id = None
+                    continue
                 ui.print_success("No more members!")
                 break
+            
+            # Update last_id for next page
+            last_id = members[-1]['user']['id']
             
             bots = []
             users_list = []
@@ -218,15 +236,22 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                 is_bot = user.get('bot', False)
                 if not user_id or user_id == bot_id: continue
                 
-                if get_member_highest_role(m, all_roles) >= bot_highest: continue
+                # Check cache first (Fastest)
                 if user_id in attempted_ids: continue
                 
                 new_found = True
+                
+                # Check hierarchy (Slower)
+                if get_member_highest_role(m, all_roles) >= bot_highest:
+                    # Mark unbannable users as attempted so we don't check roles again
+                    attempted_ids.add(user_id)
+                    continue
+                
                 if is_bot:
                     bots.append({'id': user_id, 'name': user.get('username', user_id)})
                 else:
                     users_list.append({'id': user_id, 'name': user.get('username', user_id)})
-            
+                    
             if not bots and not users_list:
                 if not new_found:
                     consecutive_no_new += 1
@@ -275,18 +300,22 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                 if bots:
                     per_thread = max(1, len(bots) // min(20, len(bots)))
                     for i in range(0, len(bots), per_thread):
-                        t = threading.Thread(target=fast_kick_worker, args=(bots[i:i+per_thread],))
+                        t = threading.Thread(target=fast_kick_worker, args=(bots[i:i+per_thread],), daemon=True)
                         threads.append(t)
                         t.start()
                 
                 if users_list:
                     per_thread = max(1, len(users_list) // min(30, len(users_list)))
                     for i in range(0, len(users_list), per_thread):
-                        t = threading.Thread(target=fast_ban_worker, args=(users_list[i:i+per_thread],))
+                        t = threading.Thread(target=fast_ban_worker, args=(users_list[i:i+per_thread],), daemon=True)
                         threads.append(t)
                         t.start()
                 
-                for t in threads: t.join()
+                # Non-blocking join
+                while any(t.is_alive() for t in threads):
+                    if stop_event.is_set():
+                        return # Immediately return to menu
+                    time.sleep(0.1)
                 
                 total_kicked = kicked_count[0]
                 total_banned = banned_count[0]

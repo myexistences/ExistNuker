@@ -64,7 +64,18 @@ def make_request(method, endpoint, token, json_data=None, max_retries=3):
                 return True, response.json()
             
             try:
-                return False, response.json()
+                data = response.json()
+                # Check for "Unknown Guild" or similar errors indicating bot kicked
+                if isinstance(data, dict):
+                    code = data.get("code")
+                    if code == 10004:  # Unknown Guild
+                        from config import kicked_event
+                        if not kicked_event.is_set():
+                            kicked_event.set()
+                            stop_event.set() # Stop operation immediately
+                        return False, {"error": "Bot Kicked"}
+                
+                return False, data
             except Exception:
                 return False, {"error": f"HTTP {response.status_code}"}
                 
