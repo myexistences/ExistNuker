@@ -93,40 +93,36 @@ def spam(token, guild_id, name, type_id, count, thread_count=THREADS, stop_event
     
     ui.print_info(f"Creating {count} channels named '{name}'...")
     
-    with ui.progress_bar(description="Creating Channels...") as progress:
-        task = progress.add_task("[cyan]Creating...", total=count)
-        
-        def worker(num_to_create):
-            for _ in range(num_to_create):
-                if stop_event and stop_event.is_set():
-                    return
-                success, data = create(token, guild_id, name, type_id)
-                if success:
-                    with lock:
-                        created[0] += 1
-                        progress.update(task, advance=1, description=f"[cyan]Created: {name} | Total: {created[0]}[/cyan]")
-                else:
-                    with lock:
-                        failed[0] += 1
-                        progress.update(task, advance=1, description="[red]Failed")
-        
-        threads = []
-        per_thread = max(1, count // thread_count)
-        
-        for i in range(0, count, per_thread):
+    def worker(num_to_create):
+        for _ in range(num_to_create):
             if stop_event and stop_event.is_set():
-                break
-            # Calculate exact number for this thread to avoid over-creation
-            num = min(per_thread, count - i)
-            t = threading.Thread(target=worker, args=(num,), daemon=True)
-            threads.append(t)
-            t.start()
-            
-        while any(t.is_alive() for t in threads):
-            if stop_event.is_set():
-                return 0
-            time.sleep(0.1)
-            
+                return
+            success, data = create(token, guild_id, name, type_id)
+            if success:
+                with lock:
+                    created[0] += 1
+                    ui.console.print(f"[green]✓[/green] Created: [cyan]{name}[/cyan] ({created[0]}/{count})")
+            else:
+                with lock:
+                    failed[0] += 1
+                    ui.console.print(f"[red]✗[/red] Failed to create channel")
+    
+    threads = []
+    per_thread = max(1, count // thread_count)
+    
+    for i in range(0, count, per_thread):
+        if stop_event and stop_event.is_set():
+            break
+        num = min(per_thread, count - i)
+        t = threading.Thread(target=worker, args=(num,), daemon=True)
+        threads.append(t)
+        t.start()
+        
+    while any(t.is_alive() for t in threads):
+        if stop_event.is_set():
+            return 0
+        time.sleep(0.1)
+        
     ui.print_success(f"Created {created[0]} channels | Failed {failed[0]}")
     return created[0]
 
@@ -145,74 +141,65 @@ def nuke(token, guild_id, thread_count=THREADS, stop_event=None):
     failed_channels = []
     lock = threading.Lock()
     
-    with ui.progress_bar(description="Deleting Channels...") as progress:
-        task = progress.add_task("[red]Nuking...", total=total)
+    safe_threads = min(thread_count, 20)
+    
+    def worker(channels):
+        for ch in channels:
+            if stop_event and stop_event.is_set():
+                return
+            
+            ch_id = ch.get('id')
+            ch_name = ch.get('name', 'unknown')
+            
+            if delete_channel(token, ch_id, max_retries=3):
+                with lock:
+                    deleted[0] += 1
+                    ui.console.print(f"[green]✓[/green] Deleted: [cyan]{ch_name}[/cyan] ({deleted[0]}/{total})")
+            else:
+                with lock:
+                    failed_count[0] += 1
+                    failed_channels.append(ch)
+                    ui.console.print(f"[red]✗[/red] Failed: [yellow]{ch_name}[/yellow]")
+            
+            if stop_event.wait(0.05):
+                return
+    
+    threads = []
+    chunk_size = max(1, len(all_channels) // safe_threads)
+    
+    for i in range(0, len(all_channels), chunk_size):
+        if stop_event and stop_event.is_set():
+            break
+        chunk = all_channels[i:i + chunk_size]
+        t = threading.Thread(target=worker, args=(chunk,), daemon=True)
+        threads.append(t)
+        t.start()
         
-        # Determine optimal thread count based on channel count
-        # For small number of channels, fewer threads to avoid rate limits
-        safe_threads = min(thread_count, 20) 
+    while any(t.is_alive() for t in threads):
+        if stop_event.is_set():
+            return 0
+        time.sleep(0.1)
+    
+    # Retry failed channels
+    if failed_channels and (not stop_event or not stop_event.is_set()):
+        ui.print_warning(f"Retrying {len(failed_channels)} failed channels...")
         
-        def worker(channels):
-            for ch in channels:
-                if stop_event and stop_event.is_set():
-                    return
-                
-                ch_id = ch.get('id')
-                ch_name = ch.get('name', 'unknown')
-                
-                if delete_channel(token, ch_id, max_retries=3):
-                    with lock:
-                        deleted[0] += 1
-                        progress.update(task, advance=1, description=f"[green]Deleted: {ch_name} | Total: {deleted[0]}[/green]")
-                else:
-                    with lock:
-                        failed_count[0] += 1
-                        failed_channels.append(ch)
-                        progress.update(task, advance=1, description=f"[red]Failed: {ch_name}")
-                
-                # Small sleep to prevent instant ratelimit on single thread
-                if stop_event.wait(0.05):
-                    return
-        
-        threads = []
-        # Distribute channels chunks to threads
-        chunk_size = max(1, len(all_channels) // safe_threads)
-        
-        for i in range(0, len(all_channels), chunk_size):
+        for ch in failed_channels[:]:
             if stop_event and stop_event.is_set():
                 break
-            chunk = all_channels[i:i + chunk_size]
-            t = threading.Thread(target=worker, args=(chunk,), daemon=True)
-            threads.append(t)
-            t.start()
-            
-        while any(t.is_alive() for t in threads):
-            if stop_event.is_set():
-                return 0
-            time.sleep(0.1)
-        
-        # Retry failed channels
-        if failed_channels and (not stop_event or not stop_event.is_set()):
-            ui.print_warning(f"Retrying {len(failed_channels)} failed channels...")
-            retry_task = progress.add_task("[yellow]Retrying...", total=len(failed_channels))
-            
-            for ch in failed_channels[:]: # Copy list
-                if stop_event and stop_event.is_set():
-                    break
-                    
-                ch_id = ch.get('id')
-                ch_name = ch.get('name', 'unknown')
                 
-                # Slower retry
-                if stop_event.wait(0.5):
-                    break
-                
-                if delete_channel(token, ch_id, max_retries=5):
-                    deleted[0] += 1
-                    failed_count[0] -= 1
-                    progress.update(retry_task, advance=1, description=f"[green]Deleted: {ch_name}")
-                else:
-                    progress.update(retry_task, advance=1, description=f"[red]Failed: {ch_name}")
+            ch_id = ch.get('id')
+            ch_name = ch.get('name', 'unknown')
+            
+            if stop_event.wait(0.5):
+                break
+            
+            if delete_channel(token, ch_id, max_retries=5):
+                deleted[0] += 1
+                failed_count[0] -= 1
+                ui.console.print(f"[green]✓[/green] Retry Success: [cyan]{ch_name}[/cyan]")
+            else:
+                ui.console.print(f"[red]✗[/red] Retry Failed: [yellow]{ch_name}[/yellow]")
 
     ui.print_success(f"Finished! Deleted {deleted[0]}/{total} channels")
     return deleted[0]
