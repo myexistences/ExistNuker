@@ -3,14 +3,15 @@ User Operations Module
 - Two modes: Fetch mode and Fast mode
 - Kicks bots first (can't ban bots)
 - FULL SPEED banning
+- Live Status Updates (Banned/Failed counts)
 Cross-platform with connection pooling
 """
 
 import threading
 import time
 from discord_api import make_request, get_session, get_bot_info, get_bot_highest_role_position, get_guild_roles, BASE_URL
-from config import Colors, THREADS, TIMEOUT
-
+from config import THREADS, TIMEOUT
+from interface import ui
 
 def get_members(token, guild_id, limit=1000, after=None):
     """Get guild members (paginated)"""
@@ -22,7 +23,6 @@ def get_members(token, guild_id, limit=1000, after=None):
     if success and isinstance(data, list):
         return data
     return []
-
 
 def get_member_highest_role(member, all_roles):
     """Get the highest role position of a member"""
@@ -38,7 +38,6 @@ def get_member_highest_role(member, all_roles):
                 highest = pos
     return highest
 
-
 def kick_user_fast(token, guild_id, user_id):
     """Kick a user - FAST, ignore errors"""
     session = get_session()
@@ -48,7 +47,6 @@ def kick_user_fast(token, guild_id, user_id):
         return response.status_code in [200, 204, 404]
     except Exception:
         return False
-
 
 def ban_user_fast(token, guild_id, user_id):
     """Ban a user - FAST, ignore errors"""
@@ -60,7 +58,6 @@ def ban_user_fast(token, guild_id, user_id):
     except Exception:
         return False
 
-
 def prune_members(token, guild_id, days=7, include_roles=True):
     """Prune inactive members"""
     days = max(1, min(30, days))
@@ -69,53 +66,51 @@ def prune_members(token, guild_id, days=7, include_roles=True):
     if include_roles:
         endpoint += "&include_roles=true"
     
-    print(f"{Colors.CYAN}Checking prune count for {days} days...{Colors.RESET}")
-    success, data = make_request("GET", endpoint, token)
+    with ui.status_spinner(f"Checking prune count for {days} days..."):
+        success, data = make_request("GET", endpoint, token)
     
     if not success:
-        print(f"{Colors.RED}Failed to get prune count{Colors.RESET}")
+        ui.print_error("Failed to get prune count")
         return 0
     
     prune_count = data.get('pruned', 0) if data else 0
-    print(f"{Colors.CYAN}Members to prune: {prune_count}{Colors.RESET}")
+    ui.print_info(f"Members to prune: {prune_count}")
     
     if prune_count == 0:
-        print(f"{Colors.YELLOW}No members to prune{Colors.RESET}")
+        ui.print_warning("No members to prune")
         return 0
     
-    print(f"{Colors.RED}Pruning {prune_count} members...{Colors.RESET}")
     payload = {"days": days}
     if include_roles:
         payload["include_roles"] = True
     
-    success, data = make_request("POST", f"/guilds/{guild_id}/prune", token, payload)
+    with ui.status_spinner(f"Pruning {prune_count} members..."):
+        success, data = make_request("POST", f"/guilds/{guild_id}/prune", token, payload)
     
     if success:
         pruned = data.get('pruned', 0) if data else 0
-        print(f"{Colors.GREEN}Pruned {pruned} members{Colors.RESET}")
+        ui.print_success(f"Pruned {pruned} members")
         return pruned
     return 0
-
 
 def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=None):
     """
     Ban all members
-    
-    fetch_mode=True: Fetch 1k -> ban -> fetch again until none left
-    fetch_mode=False: Fast mode - ban continuously, pause after 1k, repeat
+    Using rich progress bars with Live Stats
     """
     bot_info = get_bot_info(token)
     bot_id = bot_info.get('id') if bot_info else None
     
-    bot_highest = get_bot_highest_role_position(token, guild_id)
-    all_roles = get_guild_roles(token, guild_id)
+    with ui.status_spinner("Fetching role data..."):
+        bot_highest = get_bot_highest_role_position(token, guild_id)
+        all_roles = get_guild_roles(token, guild_id)
     
     total_kicked = 0
     total_banned = 0
+    total_failed = 0
     
     if fetch_mode:
-        # FETCH MODE: Fetch 1k, ban, repeat until no members left
-        print(f"{Colors.CYAN}Fetch Mode: Will fetch 1k, ban, fetch again until done{Colors.RESET}")
+        ui.print_info("Fetch Mode: Will fetch 1k, ban, fetch again until done")
         
         round_num = 0
         while True:
@@ -123,11 +118,13 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                 break
             
             round_num += 1
-            print(f"\n{Colors.CYAN}=== Round {round_num}: Fetching up to 1000 members ==={Colors.RESET}")
+            ui.print_info(f"=== Round {round_num}: Fetching up to 1000 members ===")
             
-            members = get_members(token, guild_id, limit=1000)
+            with ui.status_spinner("Fetching members..."):
+                members = get_members(token, guild_id, limit=1000)
+            
             if not members:
-                print(f"{Colors.GREEN}No more members to ban!{Colors.RESET}")
+                ui.print_success("No more members to ban!")
                 break
             
             bots = []
@@ -152,54 +149,63 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                     users_list.append({'id': user_id, 'name': username})
             
             if not bots and not users_list:
-                print(f"{Colors.GREEN}No bannable members found!{Colors.RESET}")
+                ui.print_success("No bannable members found in this batch!")
                 break
             
-            print(f"{Colors.CYAN}Found {len(bots)} bots, {len(users_list)} members{Colors.RESET}")
+            ui.print_info(f"Found {len(bots)} bots, {len(users_list)} members")
             
-            # Kick bots
-            for bot in bots:
-                if stop_event and stop_event.is_set():
-                    break
-                if kick_user_fast(token, guild_id, bot['id']):
-                    total_kicked += 1
-                    print(f"{Colors.MAGENTA}[{total_kicked}] Kicked: {bot['name']}{Colors.RESET}")
+            # Use progress bar for actions
+            with ui.progress_bar(description="Processing batch...") as progress:
+                kick_task = progress.add_task("[magenta]Kicking Bots...", total=len(bots)) if bots else None
+                ban_task = progress.add_task("[red]Banning Members...", total=len(users_list)) if users_list else None
+                
+                # Kick bots
+                for bot in bots:
+                    if stop_event and stop_event.is_set(): break
+                    success = kick_user_fast(token, guild_id, bot['id'])
+                    if success:
+                        total_kicked += 1
+                        progress.update(kick_task, advance=1, description=f"[magenta]Kicked: {bot['name']} | Total: {total_kicked}[/magenta]")
+                    else:
+                        total_failed += 1
+                        progress.update(kick_task, advance=1, description=f"[red]Failed: {bot['name']}")
+                
+                # Ban members
+                for user in users_list:
+                    if stop_event and stop_event.is_set(): break
+                    success = ban_user_fast(token, guild_id, user['id'])
+                    if success:
+                        total_banned += 1
+                        progress.update(ban_task, advance=1, description=f"[red]Banned: {user['name']} | Total: {total_banned}[/red]")
+                    else:
+                        total_failed += 1
+                        progress.update(ban_task, advance=1, description=f"[yellow]Failed: {user['name']}")
             
-            # Ban members
-            for user in users_list:
-                if stop_event and stop_event.is_set():
-                    break
-                if ban_user_fast(token, guild_id, user['id']):
-                    total_banned += 1
-                    print(f"{Colors.GREEN}[{total_banned}] Banned: {user['name']}{Colors.RESET}")
-            
-            print(f"{Colors.YELLOW}Round {round_num} done. Checking for more...{Colors.RESET}")
-            time.sleep(1)  # Brief pause before next round
+            ui.print_warning(f"Round {round_num} done. Caught {total_banned} bans, {total_kicked} kicks.")
+            time.sleep(1)
     
     else:
-        # FAST MODE: Ban as fast as possible with role checks and loop detection
-        print(f"{Colors.CYAN}Fast Mode: Banning at max speed, ignoring errors{Colors.RESET}")
+        # FAST MODE
+        ui.print_info("Fast Mode: Banning at max speed")
         
         banned_count = [0]
         kicked_count = [0]
+        failed_count = [0]
         lock = threading.Lock()
-        
-        # Track already-attempted users to detect infinite loops
         attempted_ids = set()
         
         round_num = 0
-        consecutive_no_new = 0  # Track rounds with no new members
+        consecutive_no_new = 0
         
         while True:
-            if stop_event and stop_event.is_set():
-                break
-            
+            if stop_event and stop_event.is_set(): break
             round_num += 1
-            print(f"\n{Colors.CYAN}=== Round {round_num}: Fetching batch ==={Colors.RESET}")
             
-            members = get_members(token, guild_id, limit=1000)
+            with ui.status_spinner(f"Round {round_num}: Fetching members..."):
+                members = get_members(token, guild_id, limit=1000)
+            
             if not members:
-                print(f"{Colors.GREEN}No more members!{Colors.RESET}")
+                ui.print_success("No more members!")
                 break
             
             bots = []
@@ -210,21 +216,12 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                 user = m.get('user', {})
                 user_id = user.get('id')
                 is_bot = user.get('bot', False)
+                if not user_id or user_id == bot_id: continue
                 
-                if not user_id or user_id == bot_id:
-                    continue
-                
-                # Check role hierarchy (skip if member's role >= bot's role)
-                member_highest = get_member_highest_role(m, all_roles)
-                if member_highest >= bot_highest:
-                    continue
-                
-                # Skip already attempted
-                if user_id in attempted_ids:
-                    continue
+                if get_member_highest_role(m, all_roles) >= bot_highest: continue
+                if user_id in attempted_ids: continue
                 
                 new_found = True
-                
                 if is_bot:
                     bots.append({'id': user_id, 'name': user.get('username', user_id)})
                 else:
@@ -233,75 +230,69 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
             if not bots and not users_list:
                 if not new_found:
                     consecutive_no_new += 1
-                    if consecutive_no_new >= 2:
-                        print(f"{Colors.GREEN}No new bannable members found (all remaining have higher roles)!{Colors.RESET}")
-                        break
-                    print(f"{Colors.YELLOW}No new members in this batch, checking again...{Colors.RESET}")
+                    if consecutive_no_new >= 2: break
                     time.sleep(1)
                     continue
-                print(f"{Colors.GREEN}No bannable members!{Colors.RESET}")
                 break
             
-            consecutive_no_new = 0  # Reset counter when we find new members
+            consecutive_no_new = 0
+            for bot in bots: attempted_ids.add(bot['id'])
+            for user in users_list: attempted_ids.add(user['id'])
             
-            # Mark all as attempted
-            for bot in bots:
-                attempted_ids.add(bot['id'])
-            for user in users_list:
-                attempted_ids.add(user['id'])
+            with ui.progress_bar(description="Processing batch...") as progress:
+                kick_task = progress.add_task("[magenta]Kicking...", total=len(bots)) if bots else None
+                ban_task = progress.add_task("[red]Banning...", total=len(users_list)) if users_list else None
+                
+                def fast_kick_worker(bot_list):
+                    for bot in bot_list:
+                        if stop_event.is_set(): return
+                        if kick_user_fast(token, guild_id, bot['id']):
+                            with lock:
+                                kicked_count[0] += 1
+                                if kick_task is not None:
+                                    progress.update(kick_task, advance=1, description=f"[magenta]Kicked {bot['name']} ({kicked_count[0]})[/magenta]")
+                        else:
+                            with lock:
+                                failed_count[0] += 1
+                                if kick_task is not None:
+                                    progress.update(kick_task, advance=1)
+                
+                def fast_ban_worker(user_list):
+                    for user in user_list:
+                        if stop_event.is_set(): return
+                        if ban_user_fast(token, guild_id, user['id']):
+                            with lock:
+                                banned_count[0] += 1
+                                if ban_task is not None:
+                                    progress.update(ban_task, advance=1, description=f"[red]Banned {user['name']} ({banned_count[0]})[/red]")
+                        else:
+                            with lock:
+                                failed_count[0] += 1
+                                if ban_task is not None:
+                                    progress.update(ban_task, advance=1)
+                
+                threads = []
+                if bots:
+                    per_thread = max(1, len(bots) // min(20, len(bots)))
+                    for i in range(0, len(bots), per_thread):
+                        t = threading.Thread(target=fast_kick_worker, args=(bots[i:i+per_thread],))
+                        threads.append(t)
+                        t.start()
+                
+                if users_list:
+                    per_thread = max(1, len(users_list) // min(30, len(users_list)))
+                    for i in range(0, len(users_list), per_thread):
+                        t = threading.Thread(target=fast_ban_worker, args=(users_list[i:i+per_thread],))
+                        threads.append(t)
+                        t.start()
+                
+                for t in threads: t.join()
+                
+                total_kicked = kicked_count[0]
+                total_banned = banned_count[0]
+                total_failed = failed_count[0]
             
-            print(f"{Colors.RED}Banning {len(bots)} bots + {len(users_list)} members FAST...{Colors.RESET}")
-            
-            def fast_kick_worker(bot_list):
-                for bot in bot_list:
-                    if stop_event and stop_event.is_set():
-                        return
-                    kick_user_fast(token, guild_id, bot['id'])
-                    with lock:
-                        kicked_count[0] += 1
-                    print(f"{Colors.MAGENTA}[{kicked_count[0]}] Kicked: {bot['name']}{Colors.RESET}")
-            
-            def fast_ban_worker(user_list):
-                for user in user_list:
-                    if stop_event and stop_event.is_set():
-                        return
-                    ban_user_fast(token, guild_id, user['id'])
-                    with lock:
-                        banned_count[0] += 1
-                    print(f"{Colors.GREEN}[{banned_count[0]}] Banned: {user['name']}{Colors.RESET}")
-            
-            # Multi-threaded fast banning
-            threads = []
-            
-            # Kick bots with threads
-            if bots:
-                safe_threads = min(20, len(bots))
-                per_thread = max(1, len(bots) // safe_threads)
-                for i in range(0, len(bots), per_thread):
-                    chunk = bots[i:i+per_thread]
-                    t = threading.Thread(target=fast_kick_worker, args=(chunk,))
-                    threads.append(t)
-                    t.start()
-            
-            # Ban users with threads
-            if users_list:
-                safe_threads = min(30, len(users_list))
-                per_thread = max(1, len(users_list) // safe_threads)
-                for i in range(0, len(users_list), per_thread):
-                    chunk = users_list[i:i+per_thread]
-                    t = threading.Thread(target=fast_ban_worker, args=(chunk,))
-                    threads.append(t)
-                    t.start()
-            
-            for t in threads:
-                t.join()
-            
-            total_kicked = kicked_count[0]
-            total_banned = banned_count[0]
-            
-            print(f"{Colors.YELLOW}Processed batch. Pausing 1s before next...{Colors.RESET}")
             time.sleep(1)
     
-    print(f"\n{Colors.GREEN}Finished! Kicked {total_kicked} bots, Banned {total_banned} members{Colors.RESET}")
+    ui.print_success(f"Finished! Kicked: {total_kicked} | Banned: {total_banned} | Failed: {total_failed}")
     return total_kicked + total_banned
-

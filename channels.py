@@ -1,57 +1,46 @@
 """
 Channel Operations Module
-Handles Discord channel CRUD operations with retry logic
+- Parallel creation/deletion
+- Live Status Updates (Success/Fail counts)
 Cross-platform with connection pooling
 """
 
 import threading
 import time
 from discord_api import make_request, get_session, BASE_URL
-from config import Colors, THREADS, TIMEOUT, stop_event
-
+from config import THREADS, TIMEOUT, stop_event
+from interface import ui
 
 class ChannelType:
-    TEXT = 0
-    VOICE = 2
-    CATEGORY = 4
-    STAGE = 13
-
+    GUILD_TEXT = 0
+    GUILD_VOICE = 2
+    GUILD_CATEGORY = 4
 
 def get_all(token, guild_id):
-    """Get all channels in a guild (including categories)"""
-    print(f"{Colors.CYAN}Fetching all channels...{Colors.RESET}")
+    """Get all channels in a guild"""
     success, data = make_request("GET", f"/guilds/{guild_id}/channels", token)
     if success and isinstance(data, list):
-        print(f"{Colors.CYAN}Found {len(data)} channels{Colors.RESET}")
         return data
     return []
 
-
-def create(token, guild_id, name, channel_type=ChannelType.TEXT):
-    """Create a channel in a guild"""
-    payload = {
-        "name": name,
-        "type": channel_type
-    }
-    
-    # Only text channels support topic
-    if channel_type == ChannelType.TEXT:
+def create(token, guild_id, name, type_id):
+    """Create a channel"""
+    payload = {"name": name, "type": type_id}
+    if type_id == ChannelType.GUILD_TEXT:
         payload["topic"] = "Created by ExistNuker"
     
     success, data = make_request("POST", f"/guilds/{guild_id}/channels", token, payload)
     return success, data
 
-
-def delete(token, channel_id, max_retries=5):
-    """
-    Delete a channel with retry logic for rate limits
-    Returns: (success: bool, skip: bool) - skip=True means channel can't be deleted
-    """
+def delete_channel(token, channel_id, max_retries=5):
+    """Delete a single channel with rate limit handling"""
     session = get_session()
     headers = {
         "Authorization": f"Bot {token}",
         "Content-Type": "application/json"
     }
+    
+    # Use shorter timeout for speed
     timeout_seconds = TIMEOUT / 1000 if TIMEOUT else 10
     
     for attempt in range(max_retries):
@@ -62,175 +51,164 @@ def delete(token, channel_id, max_retries=5):
                 timeout=timeout_seconds
             )
             
-            if response.status_code == 204 or response.status_code == 200:
-                return True, False
+            if response.status_code in [200, 204]:
+                return True
+            
+            if response.status_code == 404:
+                return True # Already deleted
             
             if response.status_code == 429:
-                # Rate limited - wait and retry
+                # Rate limited
                 try:
                     data = response.json()
                     retry_after = data.get("retry_after", 1)
-                except Exception:
+                except:
                     retry_after = 1
-                if stop_event.wait(retry_after):
-                    return False, False
+                
+                # Check stop event during wait
+                if stop_event.wait(retry_after + 0.1):
+                    return False
                 continue
             
-            if response.status_code == 404:
-                # Already deleted
-                return True, False
+            if response.status_code in [400, 403]:
+                return False # Permission error or invalid
             
-            # Check for non-deletable channels (community, rules, etc)
-            if response.status_code == 400 or response.status_code == 403:
-                try:
-                    data = response.json()
-                    error_code = data.get("code", 0)
-                    message = data.get("message", "")
-                    
-                    # Error codes for non-deletable channels:
-                    # 50074 - Cannot delete a channel required for Community Servers
-                    # 50035 - Invalid Form Body (usually system channel)
-                    # 50013 - Missing Permissions
-                    if error_code in [50074, 50035, 50013] or "community" in message.lower() or "cannot delete" in message.lower():
-                        return False, True  # Skip this channel
-                except Exception:
-                    pass
-            
-            if stop_event.wait(0.5):
-                return False, False
-            
+            # Check stop event
+            if stop_event.wait(0.2):
+                return False
+                
         except Exception:
-            if stop_event.wait(0.5):
-                return False, False
+            if stop_event.wait(0.2):
+                return False
             continue
-    
-    return False, False
+            
+    return False
 
-
-def spam(token, guild_id, name, channel_type, count, thread_count=THREADS, stop_event=None):
-    """Create multiple channels using threading"""
-    count = min(500, count)
+def spam(token, guild_id, name, type_id, count, thread_count=THREADS, stop_event=None):
+    """Create multiple channels with live stats"""
+    count = min(500, count) # Safety limit
     created = [0]
+    failed = [0]
     lock = threading.Lock()
     
-    print(f"{Colors.CYAN}Creating {count} channels named '{name}'...{Colors.RESET}")
+    ui.print_info(f"Creating {count} channels named '{name}'...")
     
-    def worker(num_to_create):
-        for _ in range(num_to_create):
+    with ui.progress_bar(description="Creating Channels...") as progress:
+        task = progress.add_task("[cyan]Creating...", total=count)
+        
+        def worker(num_to_create):
+            for _ in range(num_to_create):
+                if stop_event and stop_event.is_set():
+                    return
+                success, data = create(token, guild_id, name, type_id)
+                if success:
+                    with lock:
+                        created[0] += 1
+                        progress.update(task, advance=1, description=f"[cyan]Created: {name} | Total: {created[0]}[/cyan]")
+                else:
+                    with lock:
+                        failed[0] += 1
+                        progress.update(task, advance=1, description="[red]Failed")
+        
+        threads = []
+        per_thread = max(1, count // thread_count)
+        
+        for i in range(0, count, per_thread):
             if stop_event and stop_event.is_set():
-                return
-            success, data = create(token, guild_id, name, channel_type)
-            if success:
-                with lock:
-                    created[0] += 1
-                channel_id = data.get('id', 'unknown')
-                print(f"{Colors.GREEN}Created {Colors.WHITE}#{name}{Colors.RESET} [{channel_id}]")
-            else:
-                error = data.get('message', 'Unknown error') if data else 'Unknown error'
-                print(f"{Colors.RED}Failed: {error}{Colors.RESET}")
-    
-    threads = []
-    per_thread = max(1, count // thread_count)
-    
-    for i in range(0, count, per_thread):
-        if stop_event and stop_event.is_set():
-            break
-        num = min(per_thread, count - i)
-        t = threading.Thread(target=worker, args=(num,))
-        threads.append(t)
-        t.start()
-    
-    for t in threads:
-        t.join()
-    
-    print(f"{Colors.GREEN}Created {created[0]} channels{Colors.RESET}")
+                break
+            # Calculate exact number for this thread to avoid over-creation
+            num = min(per_thread, count - i)
+            t = threading.Thread(target=worker, args=(num,))
+            threads.append(t)
+            t.start()
+            
+        for t in threads:
+            t.join()
+            
+    ui.print_success(f"Created {created[0]} channels | Failed {failed[0]}")
     return created[0]
 
-
 def nuke(token, guild_id, thread_count=THREADS, stop_event=None):
-    """
-    Delete ALL channels and categories in a guild
-    Skips community/system channels that can't be deleted
-    """
-    # Fetch all channels first
+    """Delete ALL channels with live stats"""
     all_channels = get_all(token, guild_id)
     if not all_channels:
-        print(f"{Colors.YELLOW}No channels found{Colors.RESET}")
+        ui.print_warning("No channels found")
         return 0
     
     total = len(all_channels)
-    print(f"{Colors.RED}Deleting {total} channels/categories...{Colors.RESET}")
+    ui.print_warning(f"Deleting {total} channels...")
     
     deleted = [0]
-    skipped = [0]
+    failed_count = [0]
     failed_channels = []
     lock = threading.Lock()
     
-    def worker(channel_list):
-        for channel in channel_list:
-            if stop_event and stop_event.is_set():
-                return
-            
-            channel_id = channel.get('id')
-            channel_name = channel.get('name', 'unknown')
-            channel_type = channel.get('type', 0)
-            
-            type_str = "category" if channel_type == 4 else "channel"
-            
-            success, skip = delete(token, channel_id)
-            
-            if success:
-                with lock:
-                    deleted[0] += 1
-                print(f"{Colors.GREEN}Deleted {type_str} {Colors.WHITE}#{channel_name}{Colors.RESET}")
-            elif skip:
-                with lock:
-                    skipped[0] += 1
-                print(f"{Colors.YELLOW}Skipped (community/system): #{channel_name}{Colors.RESET}")
-            else:
-                with lock:
-                    failed_channels.append(channel)
-                print(f"{Colors.RED}Failed: #{channel_name}{Colors.RESET}")
-    
-    # First pass - try to delete all channels
-    threads = []
-    per_thread = max(1, len(all_channels) // thread_count)
-    
-    for i in range(0, len(all_channels), per_thread):
-        if stop_event and stop_event.is_set():
-            break
-        chunk = all_channels[i:i+per_thread]
-        t = threading.Thread(target=worker, args=(chunk,))
-        threads.append(t)
-        t.start()
-    
-    for t in threads:
-        t.join()
-    
-    # Second pass - retry failed channels one by one
-    if failed_channels and (not stop_event or not stop_event.is_set()):
-        print(f"\n{Colors.YELLOW}Retrying {len(failed_channels)} failed channels...{Colors.RESET}")
+    with ui.progress_bar(description="Deleting Channels...") as progress:
+        task = progress.add_task("[red]Nuking...", total=total)
         
-        for channel in failed_channels[:]:
+        # Determine optimal thread count based on channel count
+        # For small number of channels, fewer threads to avoid rate limits
+        safe_threads = min(thread_count, 20) 
+        
+        def worker(channels):
+            for ch in channels:
+                if stop_event and stop_event.is_set():
+                    return
+                
+                ch_id = ch.get('id')
+                ch_name = ch.get('name', 'unknown')
+                
+                if delete_channel(token, ch_id, max_retries=3):
+                    with lock:
+                        deleted[0] += 1
+                        progress.update(task, advance=1, description=f"[green]Deleted: {ch_name} | Total: {deleted[0]}[/green]")
+                else:
+                    with lock:
+                        failed_count[0] += 1
+                        failed_channels.append(ch)
+                        progress.update(task, advance=1, description=f"[red]Failed: {ch_name}")
+                
+                # Small sleep to prevent instant ratelimit on single thread
+                if stop_event.wait(0.05):
+                    return
+        
+        threads = []
+        # Distribute channels chunks to threads
+        chunk_size = max(1, len(all_channels) // safe_threads)
+        
+        for i in range(0, len(all_channels), chunk_size):
             if stop_event and stop_event.is_set():
                 break
+            chunk = all_channels[i:i + chunk_size]
+            t = threading.Thread(target=worker, args=(chunk,))
+            threads.append(t)
+            t.start()
             
-            channel_id = channel.get('id')
-            channel_name = channel.get('name', 'unknown')
+        for t in threads:
+            t.join()
+        
+        # Retry failed channels
+        if failed_channels and (not stop_event or not stop_event.is_set()):
+            ui.print_warning(f"Retrying {len(failed_channels)} failed channels...")
+            retry_task = progress.add_task("[yellow]Retrying...", total=len(failed_channels))
             
-            success, skip = delete(token, channel_id, max_retries=10)
-            if success:
-                deleted[0] += 1
-                failed_channels.remove(channel)
-                print(f"{Colors.GREEN}Deleted #{channel_name}{Colors.RESET}")
-            elif skip:
-                skipped[0] += 1
-                failed_channels.remove(channel)
-                print(f"{Colors.YELLOW}Skipped (community/system): #{channel_name}{Colors.RESET}")
-            else:
-                print(f"{Colors.RED}Still failed: #{channel_name}{Colors.RESET}")
-    
-    print(f"\n{Colors.GREEN}Finished! Deleted {deleted[0]}/{total} channels{Colors.RESET}")
-    if skipped[0] > 0:
-        print(f"{Colors.YELLOW}Skipped {skipped[0]} community/system channels{Colors.RESET}")
+            for ch in failed_channels[:]: # Copy list
+                if stop_event and stop_event.is_set():
+                    break
+                    
+                ch_id = ch.get('id')
+                ch_name = ch.get('name', 'unknown')
+                
+                # Slower retry
+                if stop_event.wait(0.5):
+                    break
+                
+                if delete_channel(token, ch_id, max_retries=5):
+                    deleted[0] += 1
+                    failed_count[0] -= 1
+                    progress.update(retry_task, advance=1, description=f"[green]Deleted: {ch_name}")
+                else:
+                    progress.update(retry_task, advance=1, description=f"[red]Failed: {ch_name}")
+
+    ui.print_success(f"Finished! Deleted {deleted[0]}/{total} channels")
     return deleted[0]

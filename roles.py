@@ -3,34 +3,30 @@ Role Operations Module
 - Skips roles above bot
 - Skips managed/bot-specific roles
 - Rate limit handling
+- Live Status Updates (Success/Fail counts)
 Cross-platform with connection pooling
 """
 
 import threading
 import time
 from discord_api import make_request, get_session, BASE_URL, get_bot_highest_role_position, get_guild_roles
-from config import Colors, THREADS, TIMEOUT, stop_event
-
+from config import THREADS, TIMEOUT, stop_event
+from interface import ui
 
 def get_all(token, guild_id, check_hierarchy=False):
     """
     Get all deletable roles in a guild
-    Skips:
-    - @everyone
-    - Managed roles (bot-specific roles)
-    - Roles above bot's highest role
     """
-    print(f"{Colors.CYAN}Fetching all roles...{Colors.RESET}")
-    
-    all_roles = get_guild_roles(token, guild_id)
-    if not all_roles:
-        return []
-    
-    # Get bot's highest role position
-    bot_highest = 0
-    if check_hierarchy:
-        bot_highest = get_bot_highest_role_position(token, guild_id)
-        print(f"{Colors.CYAN}Bot's highest role position: {bot_highest}{Colors.RESET}")
+    with ui.status_spinner("Fetching all roles..."):
+        all_roles = get_guild_roles(token, guild_id)
+        
+        if not all_roles:
+            return []
+        
+        # Get bot's highest role position
+        bot_highest = 0
+        if check_hierarchy:
+            bot_highest = get_bot_highest_role_position(token, guild_id)
     
     # Filter roles
     roles = []
@@ -47,22 +43,20 @@ def get_all(token, guild_id, check_hierarchy=False):
         # Skip managed roles (bot-specific roles)
         if r.get('managed', False):
             skipped_managed += 1
-            print(f"{Colors.YELLOW}Skipping (bot role): {role_name}{Colors.RESET}")
             continue
         
         # Skip roles above bot
         if check_hierarchy and r.get('position', 0) >= bot_highest:
             skipped_above += 1
-            print(f"{Colors.YELLOW}Skipping (above bot): {role_name}{Colors.RESET}")
             continue
         
         roles.append(r)
     
-    print(f"{Colors.CYAN}Found {len(roles)} deletable roles{Colors.RESET}")
+    ui.print_info(f"Found {len(roles)} deletable roles")
     if skipped_managed > 0:
-        print(f"{Colors.YELLOW}Skipped {skipped_managed} bot-specific roles{Colors.RESET}")
+        ui.print_logs(f"Skipped {skipped_managed} bot-specific roles")
     if skipped_above > 0:
-        print(f"{Colors.YELLOW}Skipped {skipped_above} roles above bot{Colors.RESET}")
+        ui.print_logs(f"Skipped {skipped_above} roles above bot")
     
     return roles
 
@@ -122,113 +116,125 @@ def delete_role(token, guild_id, role_id, max_retries=5):
 
 
 def spam(token, guild_id, name, count, color=0x6B00FF, thread_count=THREADS, stop_event=None):
-    """Create multiple roles"""
+    """Create multiple roles with live stats"""
+    count = min(500, count)
     created = [0]
+    failed = [0]
     lock = threading.Lock()
     
-    print(f"{Colors.CYAN}Creating {count} roles named '{name}'...{Colors.RESET}")
+    ui.print_info(f"Creating {count} roles named '{name}'...")
     
-    def worker(num_to_create):
-        for _ in range(num_to_create):
+    with ui.progress_bar(description="Creating Roles...") as progress:
+        task = progress.add_task("[magenta]Creating...", total=count)
+        
+        def worker(num_to_create):
+            for _ in range(num_to_create):
+                if stop_event and stop_event.is_set():
+                    return
+                success, data = create(token, guild_id, name, color)
+                if success:
+                    with lock:
+                        created[0] += 1
+                        progress.update(task, advance=1, description=f"[magenta]Created: {name} | Total: {created[0]}[/magenta]")
+                else:
+                    with lock:
+                        failed[0] += 1
+                        progress.update(task, advance=1, description=f"[red]Failed[/red]")
+        
+        threads = []
+        per_thread = max(1, count // thread_count)
+        
+        for i in range(0, count, per_thread):
             if stop_event and stop_event.is_set():
-                return
-            success, data = create(token, guild_id, name, color)
-            if success:
-                with lock:
-                    created[0] += 1
-                print(f"{Colors.GREEN}Created {Colors.WHITE}{name}{Colors.RESET}")
-            else:
-                error = data.get('message', 'Unknown') if data else 'Unknown'
-                print(f"{Colors.RED}Failed: {error}{Colors.RESET}")
+                break
+            num = min(per_thread, count - i)
+            t = threading.Thread(target=worker, args=(num,))
+            threads.append(t)
+            t.start()
+        
+        for t in threads:
+            t.join()
     
-    threads = []
-    per_thread = max(1, count // thread_count)
-    
-    for i in range(0, count, per_thread):
-        if stop_event and stop_event.is_set():
-            break
-        num = min(per_thread, count - i)
-        t = threading.Thread(target=worker, args=(num,))
-        threads.append(t)
-        t.start()
-    
-    for t in threads:
-        t.join()
-    
-    print(f"{Colors.GREEN}Created {created[0]} roles{Colors.RESET}")
+    ui.print_success(f"Created {created[0]} roles | Failed {failed[0]}")
     return created[0]
 
 
 def nuke(token, guild_id, thread_count=THREADS, stop_event=None):
-    """Delete ALL deletable roles (skips bot roles and roles above bot)"""
-    # Fetch roles with hierarchy check
+    """Delete ALL deletable roles with live stats"""
     all_roles = get_all(token, guild_id, check_hierarchy=True)
     if not all_roles:
-        print(f"{Colors.YELLOW}No deletable roles found{Colors.RESET}")
+        ui.print_warning("No deletable roles found")
         return 0
     
     total = len(all_roles)
-    print(f"{Colors.RED}Deleting {total} roles...{Colors.RESET}")
+    ui.print_warning(f"Deleting {total} roles...")
     
     deleted = [0]
+    failed_count = [0]
     failed_roles = []
     lock = threading.Lock()
     
-    # Use limited threads
-    safe_threads = min(thread_count, 10)
-    
-    def worker(role_list):
-        for role in role_list:
-            if stop_event and stop_event.is_set():
-                return
-            
-            role_id = role.get('id')
-            role_name = role.get('name', 'unknown')
-            
-            if delete_role(token, guild_id, role_id, max_retries=3):
-                with lock:
-                    deleted[0] += 1
-                print(f"{Colors.GREEN}Deleted {Colors.WHITE}{role_name}{Colors.RESET}")
-            else:
-                with lock:
-                    failed_roles.append(role)
-                print(f"{Colors.RED}Failed: {role_name}{Colors.RESET}")
-            
-            if stop_event.wait(0.1):
-                return
-    
-    # First pass
-    threads = []
-    per_thread = max(1, len(all_roles) // safe_threads)
-    
-    for i in range(0, len(all_roles), per_thread):
-        if stop_event and stop_event.is_set():
-            break
-        chunk = all_roles[i:i+per_thread]
-        t = threading.Thread(target=worker, args=(chunk,))
-        threads.append(t)
-        t.start()
-    
-    for t in threads:
-        t.join()
-    
-    # Retry failed roles
-    if failed_roles and (not stop_event or not stop_event.is_set()):
-        print(f"\n{Colors.YELLOW}Retrying {len(failed_roles)} failed roles...{Colors.RESET}")
+    with ui.progress_bar(description="Deleting Roles...") as progress:
+        task = progress.add_task("[red]Nuking...", total=total)
         
-        for role in failed_roles[:]:
+        safe_threads = min(thread_count, 10)
+        
+        def worker(role_list):
+            for role in role_list:
+                if stop_event and stop_event.is_set():
+                    return
+                
+                role_id = role.get('id')
+                role_name = role.get('name', 'unknown')
+                
+                if delete_role(token, guild_id, role_id, max_retries=3):
+                    with lock:
+                        deleted[0] += 1
+                        progress.update(task, advance=1, description=f"[green]Deleted: {role_name} | Total: {deleted[0]}[/green]")
+                else:
+                    with lock:
+                        failed_count[0] += 1
+                        failed_roles.append(role)
+                        progress.update(task, advance=1, description=f"[red]Failed: {role_name}")
+                
+                if stop_event.wait(0.1):
+                    return
+        
+        threads = []
+        per_thread = max(1, len(all_roles) // safe_threads)
+        
+        for i in range(0, len(all_roles), per_thread):
             if stop_event and stop_event.is_set():
                 break
+            chunk = all_roles[i:i+per_thread]
+            t = threading.Thread(target=worker, args=(chunk,))
+            threads.append(t)
+            t.start()
+        
+        for t in threads:
+            t.join()
+        
+        # Retry failed roles
+        if failed_roles and (not stop_event or not stop_event.is_set()):
+            ui.print_warning(f"Retrying {len(failed_roles)} failed roles...")
+            retry_task = progress.add_task("[yellow]Retrying...", total=len(failed_roles))
             
-            role_id = role.get('id')
-            role_name = role.get('name', 'unknown')
-            
-            if stop_event.wait(0.5):
-                break
-            
-            if delete_role(token, guild_id, role_id, max_retries=5):
-                deleted[0] += 1
-                print(f"{Colors.GREEN}Deleted {role_name}{Colors.RESET}")
+            for role in failed_roles[:]:
+                if stop_event and stop_event.is_set():
+                    break
+                
+                role_id = role.get('id')
+                role_name = role.get('name', 'unknown')
+                
+                if stop_event.wait(0.5):
+                    break
+                
+                if delete_role(token, guild_id, role_id, max_retries=5):
+                    deleted[0] += 1
+                    failed_count[0] -= 1
+                    progress.update(retry_task, advance=1, description=f"[green]Deleted: {role_name}")
+                else:
+                    progress.update(retry_task, advance=1, description=f"[red]Failed: {role_name}")
     
-    print(f"\n{Colors.GREEN}Finished! Deleted {deleted[0]}/{total} roles{Colors.RESET}")
+    ui.print_success(f"Finished! Deleted {deleted[0]}/{total} roles")
     return deleted[0]

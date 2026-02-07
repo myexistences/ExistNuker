@@ -1,64 +1,100 @@
-# ExistNuker
+<div align="center">
 
-![Interface Screenshot](https://via.placeholder.com/800x400?text=Place+Screenshot+Here)
+# ⚡ ExistNuker ⚡
+### Advanced Discord Server Management & Moderation Tool
 
-**ExistNuker** is a robust, Python-based Discord server management and moderation tool designed for educational purposes. It features a modern, interactive terminal interface powered by `rich`, offering a user-friendly experience for managing channels, roles, webhooks, and members.
+![Python](https://img.shields.io/badge/Python-3.12%2B-blue?style=for-the-badge&logo=python&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)
+![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-> [!WARNING]
-> **EDUCATIONAL PURPOSE ONLY**
-> This tool is developed strictly for educational purposes to demonstrate API interaction, rate limit handling, and Python application structure. The developers assume no liability for misuse. Users are responsible for complying with Discord's Terms of Service.
+<img src="https://via.placeholder.com/800x400?text=ExistNuker+Dashboard" alt="ExistNuker Dashboard" width="800"/>
+
+<br/>
+
+**ExistNuker** is a powerful, multi-threaded Discord server management tool featuring a beautiful, unresponsive terminal interface. Built with performance and user experience in mind, it allows for efficient server administration through a modern CLI.
+
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Disclaimer](#-disclaimer)
+
+</div>
+
+---
 
 ## ✨ Features
 
-- **Modern UI**: Beautiful terminal interface with interactive menus and progress tracking.
-- **Cross-Platform**: Fully compatible with Windows, macOS, and Linux.
-- **Performance**: Multi-threaded operations for maximum efficiency.
-- **Resilient**: Smart rate-limit handling and automatic retries.
-- **Safety**: Built-in "Safety Mode" (Ctrl+C instantly stops operations).
+### 🎨 Modern Interface
+- **Rich UI**: Powered by `textual` and `rich` for a stunning visual experience.
+- **Live Statistics**: Real-time progress bars showing Success/Fail/Skip counts for all operations.
+- **Responsive**: Automatically adapts to terminal resizing without breaking layout.
 
-## 🛠️ Capabilities
+### ⚡ High Performance
+- **Multi-Threaded**: Executes operations concurrently for maximum speed.
+- **Smart Rate-Limiting**: Automatically handles Discord API rate limits (429s) with retry logic.
+- **Connection Pooling**: Reuses network connections to reduce latency.
 
-- **Webhook Management**: Create and manage webhooks with custom names and avatars.
-- **Channel Operations**: Bulk create or delete channels and categories.
-- **Role Management**: Bulk create or delete roles.
-- **Member Moderation**:
-  - **Fetch Mode**: Thoroughly bans members.
-  - **Fast Mode**: Rapidly bans members (optimized for speed).
-  - **Pruning**: Remove inactive members.
+### 🛠️ Core Capabilities
+| Feature | Description |
+|---|---|
+| **🚫 Mass Ban** | Fetch members and ban them with live status tracking. Supports "Fast Mode" and Bot filtering. |
+| **📢 Webhook Spam** | Create webhooks and spam messages across all channels simultaneously. |
+| **💬 Channel Nuke** | Bulk delete and create channels with custom names and types. |
+| **🎭 Role Nuke** | Bulk delete and create roles, respecting hierarchy and managed roles. |
+| **🧹 Pruning** | Kick inactive members based on inactivity period. |
 
-## 🚀 Installation & Usage
+---
 
-### 1. Requirements
+## 🚀 Installation
 
-- Python 3.8+
+### Prerequisites
+- [Python 3.12+](https://www.python.org/downloads/)
 - [Git](https://git-scm.com/)
 
-### 2. Installation
+### Setup
 
-```bash
-git clone https://github.com/myexistences/ExistNuker.git
-cd ExistNuker
-pip install -r requirements.txt
-```
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/myexistences/ExistNuker.git
+   cd ExistNuker
+   ```
 
-### 3. Running
+2. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
+---
+
+## 💻 Usage
+
+### Running the Tool
+Simply run the main script:
 ```bash
 python main.py
 ```
 
-## ⚙️ Configuration
+### Configuration
+On the first launch, a `settings.json` file will be created. You can configure:
+- **Token**: Your Discord Bot Token.
+- **Threads**: Number of concurrent threads (recommended: 50-100).
+- **Webhooks**: Default names and avatars for webhook operations.
 
-The tool automatically creates a `settings.json` file on first run. You can configure:
-- `token`: Your Bot Token
-- `webhook_name`: Default webhook name
-- `webhook_avatar`: Default webhook avatar URL
-- `threads`: Number of concurrent threads
-- `timeout`: Request timeout
-
-## 📜 License
-
-This project is open-source. Please use responsibly.
+### ⚠️ Safety Mode
+Press `Ctrl+C` at data any time to instantly stop all running operations and return to the main menu.
 
 ---
-*Created by [Exist](https://github.com/myexistences)*
+
+## 📝 Disclaimer
+
+> [!WARNING]
+> **EDUCATIONAL PURPOSE ONLY**
+> 
+> This software is developed purely for educational purposes to demonstrate API interaction, multi-threading, and Python application design. 
+> 
+> **The developers assume no liability for misuse.** Users are responsible for complying with Discord's [Terms of Service](https://discord.com/terms) and [Community Guidelines](https://discord.com/guidelines). Do not use this tool on servers you do not own or have explicit permission to manage.
+
+---
+
+<div align="center">
+
+*Created with ❤️ by [Exist](https://github.com/myexistences)*
+
+</div>

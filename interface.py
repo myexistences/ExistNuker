@@ -15,6 +15,7 @@ from rich.live import Live
 from rich.layout import Layout
 from rich.align import Align
 from rich.prompt import Prompt, IntPrompt, Confirm
+from rich import box
 
 from config import get_base_path, get_resource_path, stop_event
 
@@ -45,11 +46,15 @@ class Interface:
         
         grid = Table.grid(expand=True)
         grid.add_column(justify="center")
-        grid.add_row(Text(banner_text, style="bold cyan"))
+        
+        # Ensure banner doesn't wrap and break the art
+        banner = Text(banner_text, style="bold cyan", no_wrap=True, overflow="crop")
+        grid.add_row(banner)
+        
         grid.add_row(Text(f"{self.title}", style="bold white"))
         grid.add_row(Text(f"{self.version}", style="dim white"))
         
-        self.console.print(Panel(grid, style="cyan", border_style="cyan"))
+        self.console.print(Panel(grid, style="cyan", border_style="cyan", expand=True))
 
     def print_error(self, message):
         """Print error message"""
@@ -80,10 +85,18 @@ class Interface:
             self.console.print("[bold red]No servers found![/bold red]")
             return None
 
-        table = Table(title="Select a Server", show_header=True, header_style="bold magenta")
-        table.add_column("No.", style="cyan", width=4)
-        table.add_column("Server Name", style="white")
-        table.add_column("ID", style="dim")
+        # Use expand=True to fill width, box=ROUNDED for style
+        table = Table(
+            title="Select a Server", 
+            show_header=True, 
+            header_style="bold magenta",
+            expand=True,
+            box=box.ROUNDED,
+            border_style="cyan"
+        )
+        table.add_column("No.", style="cyan", width=4, justify="center")
+        table.add_column("Server Name", style="white", ratio=2)
+        table.add_column("ID", style="dim", ratio=1)
         
         for i, guild in enumerate(guilds, 1):
             table.add_row(str(i), str(guild.get('name', 'Unknown')), str(guild.get('id', 'Unknown')))
@@ -114,8 +127,8 @@ class Interface:
         
         # Server Info Panel
         info_grid = Table.grid(expand=True)
-        info_grid.add_column(style="cyan")
-        info_grid.add_column(style="white")
+        info_grid.add_column(style="cyan", ratio=1)
+        info_grid.add_column(style="white", ratio=3)
         
         info_grid.add_row("Server:", guild_info.get('name', 'Unknown'))
         info_grid.add_row("ID:", str(guild_info.get('id', 'Unknown')))
@@ -124,11 +137,17 @@ class Interface:
         if 'approximate_member_count' in guild_info:
             info_grid.add_row("Members:", str(guild_info.get('approximate_member_count', 0)))
             
-        self.console.print(Panel(info_grid, title="Target Server", border_style="green"))
+        self.console.print(Panel(
+            info_grid, 
+            title="Target Server", 
+            border_style="green",
+            expand=True,
+            box=box.ROUNDED
+        ))
         
         # Menu Options
-        menu_table = Table(show_header=False, box=None)
-        menu_table.add_column("Option", style="bold cyan")
+        menu_table = Table(show_header=False, box=None, expand=True)
+        menu_table.add_column("Option", style="bold cyan", width=4, justify="center")
         menu_table.add_column("Description", style="white")
         
         options = [
@@ -145,7 +164,14 @@ class Interface:
         for opt, desc in options:
             menu_table.add_row(opt, desc)
             
-        self.console.print(Panel(menu_table, title="Actions", border_style="magenta"))
+        self.console.print(Panel(
+            menu_table, 
+            title="Actions", 
+            border_style="magenta",
+            expand=True,
+            box=box.ROUNDED
+        ))
+        
         self.console.print("[dim]Press Ctrl+C to stop ongoing operations[/dim]")
         
         return Prompt.ask("[bold yellow]Select Action[/bold yellow]")
@@ -158,7 +184,8 @@ class Interface:
             BarColumn(),
             TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
             TimeRemainingColumn(),
-            transient=True
+            transient=True,
+            expand=True
         )
 
     def status_spinner(self, message):
