@@ -1,107 +1,121 @@
 <div align="center">
 
-# ⚡ ExistNuker ⚡
-### Advanced Discord Server Management & Moderation Tool
+# 💀 ExistNuker 💀
+### Discord Server Nuker
 
 ![Python](https://img.shields.io/badge/Python-3.12%2B-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge)
-![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-<img src="https://i.imgur.com/v5PbF9R.png" alt="ExistNuker Dashboard" width="800"/>
+<img src="https://i.imgur.com/v5PbF9R.png" alt="ExistNuker" width="800"/>
 
-<br/>
+**ExistNuker** is a fast, multi-threaded Discord server nuker. Destroy servers with a single command.
 
-**ExistNuker** is a powerful, multi-threaded Discord server management tool featuring a beautiful, unresponsive terminal interface. Built with performance and user experience in mind, it allows for efficient server administration through a modern CLI.
-
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Disclaimer](#-disclaimer)
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Disclaimer](#%EF%B8%8F-disclaimer)
 
 </div>
 
 ---
 
-## ✨ Features
+## 💀 What Is This?
 
-### 🎨 Modern Interface
-- **Rich UI**: Powered by `textual` and `rich` for a stunning visual experience.
-- **Live Statistics**: Real-time progress bars showing Success/Fail/Skip counts for all operations.
-- **Responsive**: Automatically adapts to terminal resizing without breaking layout.
+ExistNuker is a **Discord server destruction tool** that uses a bot token to:
+- **Delete all channels** and create spam channels
+- **Delete all roles** and create spam roles  
+- **Ban all members** from the server
+- **Spam messages** via webhooks across all channels
+- **Prune inactive members**
+- **Leave the server** when done
 
-### ⚡ High Performance
-- **Multi-Threaded**: Executes operations concurrently for maximum speed.
-- **Smart Rate-Limiting**: Automatically handles Discord API rate limits (429s) with retry logic.
-- **Connection Pooling**: Reuses network connections to reduce latency.
+---
 
-### 🛡️ Smart Defense & Reliability
-- **Kick Detection**: Zero-cost monitoring instantly stops operations if the bot is kicked.
-- **Smart Pagination**: Intelligent member fetching that never gets stuck, even with unbannable admins.
-- **Auto-Retry**: "Fast but not Reckless" mode retries failed requests once to handle network blips.
-- **Instant Stop**: Press `Ctrl+C` to immediately halt all threads and return to the menu.
+## ⚡ Features
 
-### 🛠️ Core Capabilities
 | Feature | Description |
-|---|---|
-| **🚫 Mass Ban** | Fetch members and ban them with live status tracking. Supports "Fast Mode", Bot filtering, and Smart Pagination. |
-| **📢 Webhook Spam** | Create webhooks and spam messages across all channels simultaneously. Includes separate Customization Menu. |
-| **💬 Channel Nuke** | Bulk delete and create channels with custom names and types. |
-| **🎭 Role Nuke** | Bulk delete and create roles, respecting hierarchy and managed roles. |
-| **🧹 Pruning** | Kick inactive members based on inactivity period. |
-| **🔒 Security** | Token input is masked with asterisks (`*`) for privacy. |
+|---------|-------------|
+| 🚫 **Mass Ban** | Kick bots & ban all members. Fast mode fires requests without waiting. |
+| 💬 **Webhook Spam** | Create webhooks in every channel and spam messages simultaneously. |
+| 📢 **Channel Nuke** | Delete all channels, then create spam channels. |
+| 🎭 **Role Nuke** | Delete all roles, then create spam roles. |
+| 🧹 **Prune Members** | Kick inactive members based on days of inactivity. |
+| 🚪 **Leave Server** | Make the bot leave the server when finished. |
+| ⚙️ **Customization** | Set custom webhook names, avatars, and spam messages. |
+| 🔒 **Token Security** | Token input is masked with asterisks (`*`). |
+
+### Performance
+- **Multi-Threaded**: All operations run concurrently for maximum speed
+- **Rate Limit Handling**: Automatically handles Discord's rate limits
+- **Instant Stop**: Press `Ctrl+C` to immediately stop all operations
 
 ---
 
 ## 🚀 Installation
 
-### Prerequisites
+### Requirements
 - [Python 3.12+](https://www.python.org/downloads/)
 - [Git](https://git-scm.com/)
 
 ### Setup
 
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/myexistences/ExistNuker.git
-   cd ExistNuker
-   ```
+```bash
+# Clone the repository
+git clone https://github.com/myexistences/ExistNuker.git
+cd ExistNuker
 
-2. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# Install dependencies
+pip install -r requirements.txt
+```
 
 ---
 
 ## 💻 Usage
 
-### Running the Tool
-Simply run the main script:
+### Run the Tool
 ```bash
 python main.py
 ```
 
-### Configuration
-On the first launch, a `settings.json` file will be created. You can configure:
-- **Token**: Your Discord Bot Token.
-- **Threads**: Number of concurrent threads (recommended: 50-100).
-- **Webhooks**: Default names and avatars for webhook operations.
+### Steps
+1. **Enter Bot Token** - Paste your Discord bot token (masked with `*`)
+2. **Select Server** - Choose a server the bot is in
+3. **Choose Action** - Select what you want to do:
+   - `1` Webhook Spam (All Channels)
+   - `2` Create Channels
+   - `3` Delete Channels
+   - `4` Create Roles
+   - `5` Delete Roles
+   - `6` Ban Members
+   - `7` Prune Inactive Members
+   - `8` Customize Webhook Settings
+   - `9` Leave Server
 
-### ⚠️ Safety Mode
-Press `Ctrl+C` at data any time to instantly stop all running operations and return to the main menu.
+### Stop Operations
+Press `Ctrl+C` at any time to stop all running operations.
 
 ---
 
-## 📝 Disclaimer
+## ⚠️ DISCLAIMER
 
-> [!WARNING]
-> **EDUCATIONAL PURPOSE ONLY**
-> 
-> This software is developed purely for educational purposes to demonstrate API interaction, multi-threading, and Python application design. 
-> 
-> **The developers assume no liability for misuse.** Users are responsible for complying with Discord's [Terms of Service](https://discord.com/terms) and [Community Guidelines](https://discord.com/guidelines). Do not use this tool on servers you do not own or have explicit permission to manage.
+> **⚠️ EDUCATIONAL & RESEARCH PURPOSES ONLY**
+>
+> This tool is created **strictly for educational and research purposes** to demonstrate:
+> - Discord API interaction
+> - Multi-threading in Python
+> - Terminal UI design
+>
+> **THE DEVELOPER IS NOT RESPONSIBLE FOR ANY MISUSE OF THIS SOFTWARE.**
+>
+> By using this tool, you agree that:
+> - You will **NOT** use this on servers you do not own
+> - You will **NOT** use this for malicious purposes
+> - You take **FULL RESPONSIBILITY** for your actions
+> - You understand this violates [Discord's Terms of Service](https://discord.com/terms)
+>
+> **USE AT YOUR OWN RISK. THE DEVELOPER ASSUMES NO LIABILITY.**
 
 ---
 
 <div align="center">
 
-*Created with ❤️ by [Exist](https://github.com/myexistences)*
+*Created by [Exist](https://github.com/myexistences)*
 
 </div>
