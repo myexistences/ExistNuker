@@ -33,6 +33,8 @@ ExistNuker is a **Discord server destruction tool** that uses a bot token to:
 | Feature | Description |
 |---------|-------------|
 | 🚫 **Mass Ban** | Kick bots & ban all members. Fast mode fires requests without waiting. |
+| 🦵 **Mass Kick** | Kick all non-admin members from the server. |
+| 🔓 **Unban All** | Fetches all bans and removes them one by one. |
 | 💬 **Webhook Spam** | Create webhooks in every channel and spam messages simultaneously. |
 | 📢 **Channel Nuke** | Delete all channels, then create spam channels. |
 | 🎭 **Role Nuke** | Delete all roles, then create spam roles. |
@@ -84,9 +86,11 @@ python main.py
    - `4` Create Roles
    - `5` Delete Roles
    - `6` Ban Members
-   - `7` Prune Inactive Members
-   - `8` Customize Webhook Settings
-   - `9` Leave Server
+   - `7` Kick Members
+   - `8` Unban All Members
+   - `9` Prune Inactive Members
+   - `A` Customize Webhook Settings
+   - `B` Leave Server
 
 ### Stop Operations
 Press `Ctrl+C` at any time to stop all running operations.

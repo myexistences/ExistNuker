@@ -312,3 +312,194 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
     
     ui.print_success(f"Finished! Kicked: {total_kicked} | Banned: {total_banned} | Failed: {total_failed}")
     return total_kicked + total_banned
+
+
+def kick_all(token, guild_id, thread_count=THREADS, stop_event=None):
+    """
+    Kick all members (does not ban, just kicks)
+    """
+    bot_info = get_bot_info(token)
+    bot_id = bot_info.get('id') if bot_info else None
+    
+    with ui.status_spinner("Fetching role data..."):
+        bot_highest = get_bot_highest_role_position(token, guild_id)
+        all_roles = get_guild_roles(token, guild_id)
+    
+    total_kicked = 0
+    total_failed = 0
+    total_skipped = 0
+    
+    round_num = 0
+    while True:
+        if stop_event and stop_event.is_set():
+            break
+        
+        round_num += 1
+        ui.print_info(f"Round {round_num}: Fetching members...")
+        members = get_members(token, guild_id, limit=1000)
+        
+        if not members:
+            break
+        
+        # Filter: skip bots and self, check hierarchy
+        kickable = []
+        for m in members:
+            user = m.get('user', {})
+            user_id = user.get('id')
+            
+            if user_id == bot_id:
+                continue
+            if user.get('bot', False):
+                total_skipped += 1
+                continue
+            
+            member_highest = get_member_highest_role(m, all_roles)
+            if member_highest >= bot_highest:
+                total_skipped += 1
+                continue
+            
+            kickable.append({
+                'id': user_id,
+                'name': user.get('username', 'Unknown')
+            })
+        
+        if not kickable:
+            ui.print_warning("No more kickable members")
+            break
+        
+        ui.print_warning(f"Kicking {len(kickable)} members...")
+        
+        kicked_count = [0]
+        failed_count = [0]
+        lock = threading.Lock()
+        
+        def kick_worker(user_batch):
+            for user in user_batch:
+                if stop_event and stop_event.is_set():
+                    return
+                
+                if kick_user_fast(token, guild_id, user['id']):
+                    with lock:
+                        kicked_count[0] += 1
+                        ui.console.print(f"[green]✓[/green] Kicked: [cyan]{user['name']}[/cyan] ({kicked_count[0]})")
+                else:
+                    with lock:
+                        failed_count[0] += 1
+                        ui.console.print(f"[red]✗[/red] Failed: [yellow]{user['name']}[/yellow]")
+        
+        threads = []
+        per_thread = max(1, len(kickable) // min(30, len(kickable)))
+        for i in range(0, len(kickable), per_thread):
+            t = threading.Thread(target=kick_worker, args=(kickable[i:i+per_thread],), daemon=True)
+            threads.append(t)
+            t.start()
+        
+        while any(t.is_alive() for t in threads):
+            if stop_event and stop_event.is_set():
+                return
+            time.sleep(0.1)
+        
+        total_kicked += kicked_count[0]
+        total_failed += failed_count[0]
+        time.sleep(1)
+    
+    ui.print_success(f"Finished! Kicked: {total_kicked} | Failed: {total_failed} | Skipped: {total_skipped}")
+    return total_kicked
+
+
+def get_bans(token, guild_id, limit=1000, after=None):
+    """Get guild bans (paginated)"""
+    endpoint = f"/guilds/{guild_id}/bans?limit={limit}"
+    if after:
+        endpoint += f"&after={after}"
+    
+    success, data = make_request("GET", endpoint, token)
+    if success and isinstance(data, list):
+        return data
+    return []
+
+
+def unban_user_fast(token, guild_id, user_id):
+    """Unban a user - FAST with one retry"""
+    session = get_session()
+    headers = {"Authorization": f"Bot {token}"}
+    for _ in range(2):
+        try:
+            response = session.delete(f"{BASE_URL}/guilds/{guild_id}/bans/{user_id}", headers=headers, timeout=5)
+            if response.status_code in [200, 204, 404]:
+                return True
+            if response.status_code == 429:
+                time.sleep(response.json().get("retry_after", 1))
+        except Exception:
+            pass
+    return False
+
+
+def unban_all(token, guild_id, thread_count=THREADS, stop_event=None):
+    """
+    Unban all banned members
+    """
+    ui.print_info("Fetching banned members...")
+    
+    all_bans = []
+    after = None
+    
+    while True:
+        if stop_event and stop_event.is_set():
+            break
+        
+        bans = get_bans(token, guild_id, limit=1000, after=after)
+        if not bans:
+            break
+        
+        all_bans.extend(bans)
+        
+        if len(bans) < 1000:
+            break
+        
+        after = bans[-1].get('user', {}).get('id')
+    
+    if not all_bans:
+        ui.print_warning("No banned members found")
+        return 0
+    
+    ui.print_info(f"Found {len(all_bans)} banned members")
+    ui.print_warning(f"Unbanning {len(all_bans)} members...")
+    
+    unbanned_count = [0]
+    failed_count = [0]
+    lock = threading.Lock()
+    
+    def unban_worker(ban_batch):
+        for ban in ban_batch:
+            if stop_event and stop_event.is_set():
+                return
+            
+            user = ban.get('user', {})
+            user_id = user.get('id')
+            user_name = user.get('username', 'Unknown')
+            
+            if unban_user_fast(token, guild_id, user_id):
+                with lock:
+                    unbanned_count[0] += 1
+                    ui.console.print(f"[green]✓[/green] Unbanned: [cyan]{user_name}[/cyan] ({unbanned_count[0]}/{len(all_bans)})")
+            else:
+                with lock:
+                    failed_count[0] += 1
+                    ui.console.print(f"[red]✗[/red] Failed: [yellow]{user_name}[/yellow]")
+    
+    threads = []
+    per_thread = max(1, len(all_bans) // min(30, len(all_bans)))
+    for i in range(0, len(all_bans), per_thread):
+        t = threading.Thread(target=unban_worker, args=(all_bans[i:i+per_thread],), daemon=True)
+        threads.append(t)
+        t.start()
+    
+    while any(t.is_alive() for t in threads):
+        if stop_event and stop_event.is_set():
+            return
+        time.sleep(0.1)
+    
+    ui.print_success(f"Finished! Unbanned: {unbanned_count[0]} | Failed: {failed_count[0]}")
+    return unbanned_count[0]
+

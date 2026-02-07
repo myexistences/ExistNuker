@@ -233,9 +233,11 @@ class Interface:
             ("4", "Create Roles"),
             ("5", "Delete Roles"),
             ("6", "Ban Members"),
-            ("7", "Prune Inactive Members"),
-            ("8", "Customize Webhook Settings"),
-            ("9", "Leave Server"),
+            ("7", "Kick Members"),
+            ("8", "Unban All Members"),
+            ("9", "Prune Inactive Members"),
+            ("A", "Customize Webhook Settings"),
+            ("B", "Leave Server"),
             ("0", "Back (Select Different Server)")
         ]
         

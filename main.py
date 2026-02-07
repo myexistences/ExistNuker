@@ -214,6 +214,20 @@ def handle_prune_members():
     users.prune_members(config.TOKEN, config.GUILD_ID, days=days, include_roles=include_roles)
     Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
 
+def handle_kick_members():
+    stop_event.clear()
+    if ui.confirm_action("Kick ALL members?"):
+        ui.print_warning("Kicking all members...")
+        users.kick_all(config.TOKEN, config.GUILD_ID, stop_event=stop_event)
+        Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
+
+def handle_unban_all():
+    stop_event.clear()
+    if ui.confirm_action("Unban ALL members?"):
+        ui.print_warning("Unbanning all members...")
+        users.unban_all(config.TOKEN, config.GUILD_ID, stop_event=stop_event)
+        Prompt.ask("\n[bold yellow]Press Enter to continue...[/bold yellow]")
+
 def main():
     while True:
         if not config.TOKEN:
@@ -266,9 +280,11 @@ def main():
             elif choice == "4": handle_create_roles()
             elif choice == "5": handle_delete_roles()
             elif choice == "6": handle_ban_members()
-            elif choice == "7": handle_prune_members()
-            elif choice == "8": handle_customize_webhook()
-            elif choice == "9":
+            elif choice == "7": handle_kick_members()
+            elif choice == "8": handle_unban_all()
+            elif choice == "9": handle_prune_members()
+            elif choice == "A" or choice == "a": handle_customize_webhook()
+            elif choice == "B" or choice == "b":
                 if ui.confirm_action("Make the bot LEAVE this server?"):
                     if leave_guild(config.TOKEN, config.GUILD_ID):
                         ui.print_success("Bot left the server!")
