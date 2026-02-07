@@ -161,15 +161,13 @@ def spam(token, guild_id, content, amount_per_channel, webhook_name=None, avatar
                 if send(wh['url'], content, name, avatar):
                     with lock:
                         sent[0] += 1
-                        if sent[0] % 50 == 0:  # Print every 50 messages to avoid spam
-                            ui.console.print(f"[magenta]→[/magenta] Sent {sent[0]} messages...")
+                        ui.console.print(f"[green]✓[/green] Sent: [cyan]{wh['channel_name']}[/cyan] ({i+1}/{amount_per_channel})")
+                else:
+                    with lock:
+                        ui.console.print(f"[red]✗[/red] Failed: [cyan]{wh['channel_name']}[/cyan] ({i+1}/{amount_per_channel})")
                 
                 if stop_event.wait(0.03):
                     return
-            
-            # Print when channel is done
-            with lock:
-                ui.console.print(f"[green]✓[/green] Spammed: [cyan]{wh['channel_name']}[/cyan] ({amount_per_channel} msgs)")
             
             webhook_queue.task_done()
     
