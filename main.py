@@ -24,7 +24,7 @@ if _base_path not in sys.path:
 
 import config
 from config import save_token, get_token, delete_token, get_webhook_name, get_webhook_avatar, set_webhook_name, set_webhook_avatar, stop_event
-from discord_api import test_token, get_bot_guilds, get_guild_info
+from discord_api import test_token, get_bot_guilds, get_guild_info, leave_guild
 from interface import ui
 from rich.prompt import Prompt, Confirm
 
@@ -268,6 +268,15 @@ def main():
             elif choice == "6": handle_ban_members()
             elif choice == "7": handle_prune_members()
             elif choice == "8": handle_customize_webhook()
+            elif choice == "9":
+                if ui.confirm_action("Make the bot LEAVE this server?"):
+                    if leave_guild(config.TOKEN, config.GUILD_ID):
+                        ui.print_success("Bot left the server!")
+                        time.sleep(1)
+                        config.GUILD_ID = None
+                        break
+                    else:
+                        ui.print_error("Failed to leave server.")
             
             # Check if bot was kicked during operation
             if config.kicked_event.is_set():

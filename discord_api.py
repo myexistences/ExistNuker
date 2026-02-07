@@ -99,6 +99,12 @@ def is_in_guild(token, guild_id):
     return success
 
 
+def leave_guild(token, guild_id):
+    """Make the bot leave a guild"""
+    success, data = make_request("DELETE", f"/users/@me/guilds/{guild_id}", token)
+    return success
+
+
 def get_bot_info(token):
     """Get bot user information"""
     success, data = make_request("GET", "/users/@me", token)

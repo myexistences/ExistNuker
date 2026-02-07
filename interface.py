@@ -27,6 +27,34 @@ class Interface:
         self.console = console
         self.title = "ExistNuker"
         self.version = "https://github.com/myexistences/ExistNuker"
+        self.set_fixed_size()
+
+    def set_fixed_size(self):
+        """Disable resizing of the console window (Windows only)"""
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                
+                # Get console window handle
+                hwnd = user32.GetForegroundWindow()
+                
+                # Get current window style
+                GWL_STYLE = -16
+                style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+                
+                # Disable Maximize Box (WS_MAXIMIZEBOX = 0x00010000)
+                # Disable Resizing (WS_SIZEBOX = 0x00040000)
+                style = style & ~0x00010000
+                style = style & ~0x00040000
+                
+                # Apply new style
+                user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+                
+                # Set fixed size (optional, but good for consistency)
+                # os.system("mode con: cols=100 lines=30") 
+            except Exception:
+                pass
         
     def clear(self):
         """Clear the screen"""
@@ -36,22 +64,28 @@ class Interface:
         """Print the main application banner"""
         self.clear()
         
-        banner_text = r"""
-  ______      _     _   _       _             
- |  ____|    (_)   | | | \ | |     | |            
- | |__  __  ___ ___| |_|  \| |_   _| | _____ _ __ 
- |  __| \ \/ / / __| __| . ` | | | | |/ / _ \ '__|
- | |____ >  <| \__ \ |_| |\  | |_| |   <  __/ |   
- |______/_/\_\_|___/\__|_| \_|\__,_|_|\_\___|_|   
-        """
+        # Simple, clean banner that won't break
+        lines = [
+            "╔═══════════════════════════════════════════╗",
+            "║                                           ║",
+            "║     ███████╗██╗  ██╗██╗███████╗████████╗  ║",
+            "║     ██╔════╝╚██╗██╔╝██║██╔════╝╚══██╔══╝  ║",
+            "║     █████╗   ╚███╔╝ ██║███████╗   ██║     ║",
+            "║     ██╔══╝   ██╔██╗ ██║╚════██║   ██║     ║",
+            "║     ███████╗██╔╝ ██╗██║███████║   ██║     ║",
+            "║     ╚══════╝╚═╝  ╚═╝╚═╝╚══════╝   ╚═╝     ║",
+            "║               N U K E R                   ║",
+            "║                                           ║",
+            "╚═══════════════════════════════════════════╝",
+        ]
         
         grid = Table.grid(expand=True)
         grid.add_column(justify="center")
         
-        # Ensure banner doesn't wrap and break the art
-        banner = Text(banner_text, style="bold cyan", no_wrap=True, overflow="crop")
-        grid.add_row(banner)
+        for line in lines:
+            grid.add_row(Text(line, style="bold cyan"))
         
+        grid.add_row(Text(""))
         grid.add_row(Text(f"{self.title}", style="bold white"))
         grid.add_row(Text(f"{self.version}", style="dim white"))
         
@@ -201,6 +235,7 @@ class Interface:
             ("6", "Ban Members"),
             ("7", "Prune Inactive Members"),
             ("8", "Customize Webhook Settings"),
+            ("9", "Leave Server"),
             ("0", "Back (Select Different Server)")
         ]
         
