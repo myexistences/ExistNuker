@@ -142,90 +142,86 @@ def spam(token, guild_id, content, amount_per_channel, webhook_name=None, avatar
     done_creating = [False]
     lock = threading.Lock()
     
-    with ui.progress_bar(description="Webhook Spam...") as progress:
-        create_task = progress.add_task("[cyan]Creating Webhooks...", total=len(target_channels))
-        spam_task = progress.add_task("[magenta]Sending Messages...", total=len(target_channels) * amount_per_channel)
-        
-        def spam_worker():
-            while True:
+    def spam_worker():
+        while True:
+            if stop_event and stop_event.is_set():
+                return
+            
+            try:
+                wh = webhook_queue.get(timeout=0.5)
+            except queue.Empty:
+                if done_creating[0] and webhook_queue.empty():
+                    return
+                continue
+            
+            for i in range(amount_per_channel):
                 if stop_event and stop_event.is_set():
                     return
                 
-                try:
-                    wh = webhook_queue.get(timeout=0.5)
-                except queue.Empty:
-                    if done_creating[0] and webhook_queue.empty():
-                        return
-                    continue
-                
-                for _ in range(amount_per_channel):
-                    if stop_event and stop_event.is_set():
-                        return
-                    
-                    if send(wh['url'], content, name, avatar):
-                        with lock:
-                            sent[0] += 1
-                            if sent[0] % 10 == 0:
-                                progress.update(spam_task, advance=10, description=f"[magenta]Sent: {sent[0]} | Target: {len(target_channels)*amount_per_channel}")
-                            else:
-                                progress.update(spam_task, advance=1)
-                    else:
-                         progress.update(spam_task, advance=1)
-                    
-                    if stop_event.wait(0.03):
-                        return
-                
-                webhook_queue.task_done()
-        
-        def create_worker():
-            for channel in target_channels:
-                if stop_event and stop_event.is_set():
-                    break
-                
-                channel_id = channel.get('id')
-                channel_name = channel.get('name', 'unknown')
-                
-                webhook_url = get_or_create_webhook(token, channel_id, channel_name, name)
-                if webhook_url:
+                if send(wh['url'], content, name, avatar):
                     with lock:
-                        created_count[0] += 1
-                        progress.update(create_task, advance=1, description=f"[cyan]Created: {created_count[0]} | Failed: {failed_create[0]}")
-                    
-                    webhook_queue.put({
-                        'url': webhook_url,
-                        'channel_name': channel_name
-                    })
-                else:
-                    with lock:
-                        failed_create[0] += 1
-                        progress.update(create_task, advance=1, description=f"[red]Failed: {failed_create[0]}")
+                        sent[0] += 1
+                        if sent[0] % 50 == 0:  # Print every 50 messages to avoid spam
+                            ui.console.print(f"[magenta]→[/magenta] Sent {sent[0]} messages...")
                 
-                if stop_event.wait(0.05):
-                    break
+                if stop_event.wait(0.03):
+                    return
             
-            done_creating[0] = True
+            # Print when channel is done
+            with lock:
+                ui.console.print(f"[green]✓[/green] Spammed: [cyan]{wh['channel_name']}[/cyan] ({amount_per_channel} msgs)")
+            
+            webhook_queue.task_done()
+    
+    def create_worker():
+        for channel in target_channels:
+            if stop_event and stop_event.is_set():
+                break
+            
+            channel_id = channel.get('id')
+            channel_name = channel.get('name', 'unknown')
+            
+            webhook_url = get_or_create_webhook(token, channel_id, channel_name, name)
+            if webhook_url:
+                with lock:
+                    created_count[0] += 1
+                    ui.console.print(f"[cyan]✓[/cyan] Webhook: [yellow]{channel_name}[/yellow] ({created_count[0]}/{len(target_channels)})")
+                
+                webhook_queue.put({
+                    'url': webhook_url,
+                    'channel_name': channel_name
+                })
+            else:
+                with lock:
+                    failed_create[0] += 1
+                    ui.console.print(f"[red]✗[/red] Failed webhook: [yellow]{channel_name}[/yellow]")
+            
+            if stop_event.wait(0.05):
+                break
         
-        producer = threading.Thread(target=create_worker, daemon=True)
-        producer.start()
-        
-        spam_threads = min(thread_count, 20)
-        consumers = []
-        for _ in range(spam_threads):
-            t = threading.Thread(target=spam_worker, daemon=True)
-            t.start()
-            consumers.append(t)
-        
-        # Wait for producer
-        while producer.is_alive():
-            if stop_event.is_set():
-                return 0
-            time.sleep(0.1)
-        
-        # Wait for consumers
-        while any(t.is_alive() for t in consumers):
-            if stop_event.is_set():
-                return 0
-            time.sleep(0.1)
+        done_creating[0] = True
+    
+    producer = threading.Thread(target=create_worker, daemon=True)
+    producer.start()
+    
+    spam_threads = min(thread_count, 20)
+    consumers = []
+    for _ in range(spam_threads):
+        t = threading.Thread(target=spam_worker, daemon=True)
+        t.start()
+        consumers.append(t)
+    
+    # Wait for producer
+    while producer.is_alive():
+        if stop_event.is_set():
+            return 0
+        time.sleep(0.1)
+    
+    # Wait for consumers
+    while any(t.is_alive() for t in consumers):
+        if stop_event.is_set():
+            return 0
+        time.sleep(0.1)
     
     ui.print_success(f"Finished! Created {created_count[0]} webhooks, Sent {sent[0]} messages")
     return sent[0]
