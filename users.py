@@ -236,11 +236,8 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                 
                 new_found = True
                 
-                # Check hierarchy (Slower)
-                if get_member_highest_role(m, all_roles) >= bot_highest:
-                    # Mark unbannable users as attempted so we don't check roles again
-                    attempted_ids.add(user_id)
-                    continue
+                # Hierarchy check removed for FAST mode - let the API validation handle 403s
+                # This significantly speeds up the loop by avoiding role iteration per user
                 
                 if is_bot:
                     bots.append({'id': user_id, 'name': user.get('username', user_id)})
