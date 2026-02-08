@@ -171,10 +171,10 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                 success = kick_user_fast(token, guild_id, bot['id'])
                 if success:
                     total_kicked += 1
-                    ui.console.print(f"[magenta]✓[/magenta] Kicked: [cyan]{bot['name']}[/cyan] ({total_kicked})")
+                    ui.console.print(f"[magenta]✓[/magenta] Kicked: [cyan]{bot['name']}[/cyan] [dim]({bot['id']})[/dim] ({total_kicked})")
                 else:
                     total_failed += 1
-                    ui.console.print(f"[red]✗[/red] Failed to kick: [yellow]{bot['name']}[/yellow]")
+                    ui.console.print(f"[red]✗[/red] Failed to kick: [yellow]{bot['name']}[/yellow] [dim]({bot['id']})[/dim]")
             
             # Ban members
             for user in users_list:
@@ -182,10 +182,10 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                 success = ban_user_fast(token, guild_id, user['id'])
                 if success:
                     total_banned += 1
-                    ui.console.print(f"[red]✓[/red] Banned: [cyan]{user['name']}[/cyan] ({total_banned})")
+                    ui.console.print(f"[red]✓[/red] Banned: [cyan]{user['name']}[/cyan] [dim]({user['id']})[/dim] ({total_banned})")
                 else:
                     total_failed += 1
-                    ui.console.print(f"[yellow]✗[/yellow] Failed to ban: [yellow]{user['name']}[/yellow]")
+                    ui.console.print(f"[yellow]✗[/yellow] Failed to ban: [yellow]{user['name']}[/yellow] [dim]({user['id']})[/dim]")
             
             ui.print_warning(f"Round {round_num} done. Caught {total_banned} bans, {total_kicked} kicks.")
             time.sleep(1)
@@ -268,11 +268,11 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                     if kick_user_fast(token, guild_id, bot['id']):
                         with lock:
                             kicked_count[0] += 1
-                            ui.console.print(f"[magenta]✓[/magenta] Kicked: [cyan]{bot['name']}[/cyan] ({kicked_count[0]})")
+                            ui.console.print(f"[magenta]✓[/magenta] Kicked: [cyan]{bot['name']}[/cyan] [dim]({bot['id']})[/dim] ({kicked_count[0]})")
                     else:
                         with lock:
                             failed_count[0] += 1
-                            ui.console.print(f"[red]✗[/red] Failed: [yellow]{bot['name']}[/yellow]")
+                            ui.console.print(f"[red]✗[/red] Failed: [yellow]{bot['name']}[/yellow] [dim]({bot['id']})[/dim]")
             
             def fast_ban_worker(user_list):
                 for user in user_list:
@@ -280,11 +280,11 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
                     if ban_user_fast(token, guild_id, user['id']):
                         with lock:
                             banned_count[0] += 1
-                            ui.console.print(f"[red]✓[/red] Banned: [cyan]{user['name']}[/cyan] ({banned_count[0]})")
+                            ui.console.print(f"[red]✓[/red] Banned: [cyan]{user['name']}[/cyan] [dim]({user['id']})[/dim] ({banned_count[0]})")
                     else:
                         with lock:
                             failed_count[0] += 1
-                            ui.console.print(f"[yellow]✗[/yellow] Failed: [yellow]{user['name']}[/yellow]")
+                            ui.console.print(f"[yellow]✗[/yellow] Failed: [yellow]{user['name']}[/yellow] [dim]({user['id']})[/dim]")
             
             threads = []
             if bots:
@@ -384,11 +384,11 @@ def kick_all(token, guild_id, thread_count=THREADS, stop_event=None):
                 if kick_user_fast(token, guild_id, user['id']):
                     with lock:
                         kicked_count[0] += 1
-                        ui.console.print(f"[green]✓[/green] Kicked: [cyan]{user['name']}[/cyan] ({kicked_count[0]})")
+                        ui.console.print(f"[green]✓[/green] Kicked: [cyan]{user['name']}[/cyan] [dim]({user['id']})[/dim] ({kicked_count[0]})")
                 else:
                     with lock:
                         failed_count[0] += 1
-                        ui.console.print(f"[red]✗[/red] Failed: [yellow]{user['name']}[/yellow]")
+                        ui.console.print(f"[red]✗[/red] Failed: [yellow]{user['name']}[/yellow] [dim]({user['id']})[/dim]")
         
         threads = []
         per_thread = max(1, len(kickable) // min(30, len(kickable)))
