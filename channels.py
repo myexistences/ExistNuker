@@ -105,7 +105,7 @@ def spam(token, guild_id, name, type_id, count, thread_count=THREADS, stop_event
             else:
                 with lock:
                     failed[0] += 1
-                    ui.console.print(f"[red]✗[/red] Failed to create channel")
+                    ui.console.print(f"[red]✗[/red] Failed: [cyan]{name}[/cyan] ({failed[0]})")
     
     threads = []
     per_thread = max(1, count // thread_count)

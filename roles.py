@@ -136,7 +136,7 @@ def spam(token, guild_id, name, count, color=0x6B00FF, thread_count=THREADS, sto
             else:
                 with lock:
                     failed[0] += 1
-                    ui.console.print(f"[red]✗[/red] Failed to create role")
+                    ui.console.print(f"[red]✗[/red] Failed: [magenta]{name}[/magenta] ({failed[0]})")
     
     threads = []
     per_thread = max(1, count // thread_count)
