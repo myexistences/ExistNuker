@@ -41,7 +41,7 @@ def get_member_highest_role(member, all_roles):
 def kick_user_fast(token, guild_id, user_id):
     """Kick a user - FAST with one retry"""
     session = get_session()
-    headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bot {token}", "Content-Type": None}
     for _ in range(2): # 1 retry
         try:
             response = session.delete(f"{BASE_URL}/guilds/{guild_id}/members/{user_id}", headers=headers, timeout=5)
@@ -425,8 +425,8 @@ def get_bans(token, guild_id, limit=1000, after=None):
 def unban_user_fast(token, guild_id, user_id):
     """Unban a user - FAST with one retry"""
     session = get_session()
-    headers = {"Authorization": f"Bot {token}"}
-    for _ in range(2):
+    headers = {"Authorization": f"Bot {token}", "Content-Type": None}
+    for _ in range(2): # 1 retry
         try:
             response = session.delete(f"{BASE_URL}/guilds/{guild_id}/bans/{user_id}", headers=headers, timeout=5)
             if response.status_code in [200, 204, 404]:
