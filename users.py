@@ -247,10 +247,12 @@ def ban_all(token, guild_id, fetch_mode=True, thread_count=THREADS, stop_event=N
             if not bots and not users_list:
                 if not new_found:
                     consecutive_no_new += 1
-                    if consecutive_no_new >= 3: # Increased tolerance
-                         ui.print_warning("No new members found after retries. Stopping.")
+                    ui.console.print(f"[yellow]![/yellow] No new targets found (Retry {consecutive_no_new}/5)...")
+                    
+                    if consecutive_no_new >= 5: # Increased tolerance to 5 to avoid premature stop
+                         ui.print_warning("No bannable members found after multiple retries. Loop finished.")
                          break
-                    time.sleep(1)
+                    time.sleep(1.5)
                     continue
                 # If new members were found but filtered out, reset counter but don't break yet
                 consecutive_no_new = 0
